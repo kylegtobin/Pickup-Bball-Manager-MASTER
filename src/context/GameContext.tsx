@@ -615,8 +615,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setGameState(prev => {
       const newManualMode = !prev.manualMode;
       
-      // If turning off manual mode and we were waiting for replacement
-      if (!newManualMode && prev.status === 'WAITING_FOR_MANUAL_REPLACEMENT') {
+      // If turning off manual mode
+      if (!newManualMode) {
         // Check if teams are complete
         if (prev.champions.length === 5 && prev.challengers.length === 5) {
           return {
@@ -628,9 +628,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           // Teams still incomplete, keep manual mode on
           setInfoModalState({
             isOpen: true,
-            message: "Teams must be complete before turning off manual mode."
+            message: "Both teams must have exactly five players before turning manual mode off"
           });
-          return prev;
+          return {
+            ...prev,
+            manualMode: true // Force manual mode to stay on
+          };
         }
       }
 
