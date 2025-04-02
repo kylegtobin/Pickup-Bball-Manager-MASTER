@@ -29,11 +29,19 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ options, position, onClose })
 
   if (!position) return null;
 
+  // Ensure menu stays within viewport
+  const menuStyle = {
+    top: position.y,
+    left: position.x,
+    maxHeight: 'calc(100vh - ' + position.y + 'px)', // Prevent extending beyond bottom of viewport
+    maxWidth: 'calc(100vw - ' + position.x + 'px)' // Prevent extending beyond right of viewport
+  };
+
   return (
     <div
       ref={menuRef}
-      className="absolute z-50 bg-white shadow-lg rounded-md border border-gray-200 py-1 min-w-[150px]"
-      style={{ top: position.y, left: position.x }}
+      className="fixed z-50 bg-white shadow-lg rounded-md border border-gray-200 py-1 min-w-[150px]"
+      style={menuStyle}
     >
       {options.map((option, index) => (
         <button
@@ -42,7 +50,9 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ options, position, onClose })
             option.action();
             onClose();
           }}
-          className="w-full text-left px-4 py-2 hover:bg-gray-100 text-gray-700 text-sm"
+          className={`w-full text-center px-4 py-2 hover:bg-gray-100 text-base ${
+            option.label.startsWith('Remove') ? 'text-red-600 font-bold' : 'text-gray-700'
+          }`}
         >
           {option.label}
         </button>

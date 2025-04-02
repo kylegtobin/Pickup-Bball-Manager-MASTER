@@ -1,15 +1,41 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Player } from '../../types';
 import { useGame } from '../../context/GameContext';
 
 const ShootoutModal: React.FC = () => {
   const { gameState, confirmShootout, dismissShootoutModal } = useGame();
   const [selectedPlayers, setSelectedPlayers] = useState<Player[]>([]);
+  const buttonRef = useRef<HTMLButtonElement>(null);
 
   // Reset selected players when shootout team changes
   useEffect(() => {
     setSelectedPlayers([]);
   }, [gameState.shootoutTeam]);
+
+  // Handle keyboard events
+  useEffect(() => {
+    const handleKeyPress = (event: KeyboardEvent) => {
+      if (gameState.showShootoutModal && selectedPlayers.length === gameState.requiredPlayers) {
+        if (event.key === 'Enter') {
+          handleConfirm();
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyPress);
+    return () => {
+      document.removeEventListener('keydown', handleKeyPress);
+    };
+  }, [gameState.showShootoutModal, selectedPlayers, gameState.requiredPlayers]);
+
+  // Auto-focus the confirm button
+  useEffect(() => {
+    if (gameState.showShootoutModal && buttonRef.current) {
+      buttonRef.current.focus();
+      buttonRef.current.style.outline = 'none';
+      buttonRef.current.style.boxShadow = 'none';
+    }
+  }, [gameState.showShootoutModal]);
 
   if (!gameState.showShootoutModal || !gameState.shootoutTeam) return null;
 
@@ -30,25 +56,20 @@ const ShootoutModal: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white p-6 rounded-lg shadow-lg max-w-md w-full">
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-xl font-bold">3-Point Shootout or Random Selection</h2>
-          <button 
-            onClick={dismissShootoutModal}
-            className="text-gray-500 hover:text-gray-700"
-          >
-            ✕
-          </button>
+    <div className="fixed inset-0 flex items-center justify-center z-50">
+      <div className="absolute inset-0 bg-black bg-opacity-50"></div>
+      <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full mx-4 relative border-4 border-gray-900">
+        <div className="text-center mb-6">
+          <h2 className="text-2xl font-semibold">3-Point Shootout</h2>
+          <p className="mt-2 text-lg">Select {gameState.requiredPlayers} player(s) who won the shootout:</p>
         </div>
-        <p className="mb-4">Select {gameState.requiredPlayers} players who won the shootout:</p>
-        <div className="space-y-2">
+        <div className="space-y-2 max-h-[60vh] overflow-y-auto">
           {gameState.shootoutTeam.players.map(player => (
             <div
               key={player.id}
-              className={`p-2 rounded cursor-pointer ${
+              className={`p-3 rounded cursor-pointer text-center text-lg font-bold transition-colors ${
                 selectedPlayers.some(p => p.id === player.id)
-                  ? 'bg-blue-500 text-white'
+                  ? 'bg-blue-500 text-white hover:bg-blue-600'
                   : 'bg-gray-100 hover:bg-gray-200'
               }`}
               onClick={() => handlePlayerClick(player)}
@@ -57,17 +78,21 @@ const ShootoutModal: React.FC = () => {
             </div>
           ))}
         </div>
-        <button
-          className={`mt-4 w-full py-2 px-4 rounded font-bold ${
-            selectedPlayers.length === gameState.requiredPlayers
-              ? 'bg-blue-500 text-white hover:bg-blue-600'
-              : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-          }`}
-          disabled={selectedPlayers.length !== gameState.requiredPlayers}
-          onClick={handleConfirm}
-        >
-          Confirm Selection
-        </button>
+        <div className="mt-4 flex justify-center">
+          <button
+            ref={buttonRef}
+            onClick={handleConfirm}
+            disabled={selectedPlayers.length !== gameState.requiredPlayers}
+            className={`px-8 py-3 text-lg font-semibold rounded-lg transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:ring-offset-2 ${
+              selectedPlayers.length === gameState.requiredPlayers
+                ? 'bg-gray-900 hover:bg-black text-white'
+                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+            }`}
+            style={{ outline: 'none', boxShadow: 'none' }}
+          >
+            Confirm
+          </button>
+        </div>
       </div>
     </div>
   );

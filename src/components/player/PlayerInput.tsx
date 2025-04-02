@@ -2,24 +2,22 @@ import React, { useState, KeyboardEvent, FormEvent } from 'react';
 import { useGame } from '../../context/GameContext';
 
 const PlayerInput: React.FC = () => {
-  const { addPlayer, removePlayer } = useGame();
   const [newPlayerName, setNewPlayerName] = useState('');
   const [removePlayerName, setRemovePlayerName] = useState('');
+  const { addPlayer, removePlayerByName } = useGame();
 
   const handleAddPlayer = (e: FormEvent) => {
     e.preventDefault();
-    if (newPlayerName.trim()) {
-      addPlayer(newPlayerName);
-      setNewPlayerName('');
-    }
+    if (!newPlayerName.trim()) return;
+    addPlayer(newPlayerName.trim());
+    setNewPlayerName('');
   };
 
   const handleRemovePlayer = (e: FormEvent) => {
     e.preventDefault();
-    if (removePlayerName.trim()) {
-      removePlayer(removePlayerName);
-      setRemovePlayerName('');
-    }
+    if (!removePlayerName.trim()) return;
+    removePlayerByName(removePlayerName.trim());
+    setRemovePlayerName('');
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>, action: 'add' | 'remove') => {

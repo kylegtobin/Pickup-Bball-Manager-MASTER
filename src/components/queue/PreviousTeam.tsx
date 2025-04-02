@@ -1,17 +1,17 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { PreviousTeam as PreviousTeamType, Player, GameState } from '../../types';
 import { useGame } from '../../context/GameContext';
 
 interface PreviousTeamProps {
   team: PreviousTeamType;
   index: number;
-  onDragStart: (e: React.DragEvent, item: PreviousTeamType, index: number) => void;
+  onDragStart: (e: React.DragEvent) => void;
   onDragOver: (e: React.DragEvent) => void;
   onDragLeave: (e: React.DragEvent) => void;
   onDrop: (e: React.DragEvent) => void;
   onContextMenu: (e: React.MouseEvent, player: Player) => void;
-  isDragOver: boolean;
   manualMode: boolean;
+  isDragOver: boolean;
 }
 
 const PreviousTeam: React.FC<PreviousTeamProps> = ({
@@ -22,22 +22,84 @@ const PreviousTeam: React.FC<PreviousTeamProps> = ({
   onDragLeave,
   onDrop,
   onContextMenu,
-  isDragOver,
-  manualMode
+  manualMode,
+  isDragOver
 }) => {
-  const { gameState, setGameState } = useGame();
+  const { gameState, setGameState, removePlayer } = useGame();
   const { manualMode: gameManualMode } = gameState;
+  const [isDragOverState, setIsDragOver] = useState(false);
+  const [isDragOverDropZone, setIsDragOverDropZone] = useState(false);
 
-  const handlePlayerDragStart = (e: React.DragEvent, player: Player) => {
+  const handlePlayerDragStart = (e: React.DragEvent, player: Player, playerIndex: number) => {
     if (!manualMode) return;
     e.stopPropagation(); // Prevent team drag when dragging a player
     
-    e.dataTransfer.setData('playerId', player.id);
     e.dataTransfer.setData('type', 'player');
-    e.dataTransfer.setData('source', 'team');
-    e.dataTransfer.setData('sourceTeamId', team.id);
+    e.dataTransfer.setData('playerId', player.id);
     e.dataTransfer.setData('playerName', player.name);
+    e.dataTransfer.setData('source', team.id); // Set the team ID as source
+    e.dataTransfer.setData('sourceTeam', 'previousTeam'); // Mark as coming from a previous team
     e.dataTransfer.effectAllowed = 'move';
+  };
+
+  // Direct player context menu handler
+  const handlePlayerContextMenu = (e: React.MouseEvent, player: Player) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Log the event for debugging
+    console.log('[PreviousTeam] Context menu requested for player:', player.name);
+    
+    // Directly use the removePlayer function from context instead of relying on prop
+    if (onContextMenu) {
+      onContextMenu(e, player);
+    } else {
+      console.error('No context menu handler provided');
+    }
+  };
+
+  const handleTeamDragStart = (e: React.DragEvent) => {
+    if (!manualMode) return;
+    e.dataTransfer.setData('teamId', team.id);
+    e.dataTransfer.setData('type', 'team');
+    e.dataTransfer.setData('source', 'waitingQueue');
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    if (!manualMode) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(true);
+    setIsDragOverDropZone(true); // Also highlight the drop zone when hovering over the container
+  };
+
+  const handleDropZoneDragOver = (e: React.DragEvent) => {
+    if (!manualMode) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(true);
+    setIsDragOverDropZone(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+    setIsDragOverDropZone(false); // Reset drop zone highlight when leaving the container
+  };
+
+  const handleDropZoneDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Only turn off drop zone highlight if we're actually leaving the drop zone
+    // but don't turn off container highlight
+    if (!isDragOverState) {
+      setIsDragOverDropZone(false);
+    }
   };
 
   const handleTeamDrop = (e: React.DragEvent) => {
@@ -46,11 +108,16 @@ const PreviousTeam: React.FC<PreviousTeamProps> = ({
 
     e.preventDefault();
     e.stopPropagation(); // Prevent the drop from bubbling to the queue
+    
+    // Reset all highlighting states immediately
+    setIsDragOver(false);
+    setIsDragOverDropZone(false);
 
     const type = e.dataTransfer.getData('type');
     const playerId = e.dataTransfer.getData('playerId');
     const source = e.dataTransfer.getData('source');
     const sourceTeam = e.dataTransfer.getData('sourceTeam');
+    const playerName = e.dataTransfer.getData('playerName');
 
     if (type === 'player' && playerId) {
       setGameState(prev => {
@@ -64,37 +131,47 @@ const PreviousTeam: React.FC<PreviousTeamProps> = ({
         if (sourceTeam === 'champions') {
           const playerIndex = newChampions.findIndex(p => p.id === playerId);
           if (playerIndex !== -1) {
-            playerToAdd = newChampions[playerIndex];
+            playerToAdd = { ...newChampions[playerIndex] }; // Create a copy
             newChampions.splice(playerIndex, 1);
           }
         } else if (sourceTeam === 'challengers') {
           const playerIndex = newChallengers.findIndex(p => p.id === playerId);
           if (playerIndex !== -1) {
-            playerToAdd = newChallengers[playerIndex];
+            playerToAdd = { ...newChallengers[playerIndex] }; // Create a copy
             newChallengers.splice(playerIndex, 1);
           }
-        } else {
+        }
+
+        // If we haven't found the player in teams, look in the queue
+        if (!playerToAdd) {
           // Check if player is an individual in the queue
           const individualIndex = newWaitingQueue.findIndex(
             item => !isPreviousTeam(item) && item.id === playerId
           );
 
           if (individualIndex !== -1) {
-            playerToAdd = newWaitingQueue[individualIndex] as Player;
+            playerToAdd = { ...newWaitingQueue[individualIndex] as Player }; // Create a copy
             newWaitingQueue.splice(individualIndex, 1);
           } else {
-            // Check if player is in another team
+            // Look for player in previous teams
             for (let i = 0; i < newWaitingQueue.length; i++) {
               const item = newWaitingQueue[i];
               if (isPreviousTeam(item)) {
                 const playerIndex = item.players.findIndex(p => p.id === playerId);
                 if (playerIndex !== -1) {
-                  playerToAdd = item.players[playerIndex];
-                  const newPlayers = item.players.filter(p => p.id !== playerId);
-                  if (newPlayers.length > 0) {
-                    newWaitingQueue[i] = { ...item, players: newPlayers };
+                  playerToAdd = { ...item.players[playerIndex] }; // Create a copy
+                  
+                  // Special handling for any players dragged within their own team
+                  if (item.id === team.id) {
+                    // This is a player in the current team being dragged within the same team
+                    // Don't remove the player here, as we'll handle it in the same-team case
                   } else {
-                    newWaitingQueue.splice(i, 1);
+                    // Remove player from team
+                    item.players.splice(playerIndex, 1);
+                    // Remove the team if it's now empty
+                    if (item.players.length === 0) {
+                      newWaitingQueue.splice(i, 1);
+                    }
                   }
                   break;
                 }
@@ -103,22 +180,37 @@ const PreviousTeam: React.FC<PreviousTeamProps> = ({
           }
         }
 
-        if (!playerToAdd) {
-          console.error('Player not found for adding to team');
-          return prev;
-        }
+        // Add the player to the target team
+        if (playerToAdd) {
+          // Check if we're trying to add to the same team the player came from
+          const sourceIsSameAsCurrent = sourceTeam === 'previousTeam' && source === team.id;
+          
+          if (sourceIsSameAsCurrent) {
+            // If this is a single-player team (special case we handled earlier),
+            // the player is already in the team, so we don't need to add it again.
+            // Do nothing here to avoid duplication - player remains in the team.
+            console.log("Same team drag detected - no need to modify team");
+          } else {
+            // Player is coming from elsewhere, add to the target team in the queue
+            const targetTeamIndex = newWaitingQueue.findIndex(item => 
+              isPreviousTeam(item) && item.id === team.id
+            );
 
-        // Find and update the target team
-        const teamIndex = newWaitingQueue.findIndex(
-          item => isPreviousTeam(item) && item.id === team.id
-        );
-
-        if (teamIndex !== -1) {
-          const updatedTeam = {
-            ...newWaitingQueue[teamIndex] as PreviousTeamType,
-            players: [...(newWaitingQueue[teamIndex] as PreviousTeamType).players, playerToAdd]
-          };
-          newWaitingQueue[teamIndex] = updatedTeam;
+            if (targetTeamIndex !== -1) {
+              const targetTeam = newWaitingQueue[targetTeamIndex] as PreviousTeamType;
+              // Check if player is already in the team to prevent duplicates
+              if (!targetTeam.players.some(p => p.id === playerToAdd!.id)) {
+                targetTeam.players.push(playerToAdd);
+              }
+            } else {
+              // If team not found in the queue (might have been removed), add it back
+              newWaitingQueue.push({
+                type: 'PreviousTeam',
+                id: team.id,
+                players: [playerToAdd]
+              });
+            }
+          }
         }
 
         return {
@@ -137,37 +229,61 @@ const PreviousTeam: React.FC<PreviousTeamProps> = ({
 
   return (
     <div
-      className={`p-4 mb-2 rounded border-2 ${
-        isDragOver ? 'border-blue-500 bg-blue-50' : 'border-gray-300'
-      } ${manualMode && gameManualMode ? 'cursor-move' : ''}`}
-      draggable={manualMode && gameManualMode}
-      onDragStart={(e) => onDragStart(e, team, index)}
-      onDragOver={(e) => {
-        onDragOver(e);
-        if (team.players.length < 5) {
-          e.preventDefault();
-          e.stopPropagation();
-        }
+      className={`rounded-lg p-4 ${
+        manualMode ? 'cursor-move hover:border-gray-800 transition-colors duration-200' : ''
+      } ${isDragOverState ? 'border-black bg-gray-400 bg-opacity-90' : 'border-black'} w-full transition-all duration-150`}
+      style={{
+        borderWidth: '3px',
+        borderStyle: 'solid'
       }}
-      onDragLeave={onDragLeave}
+      draggable={manualMode}
+      onDragStart={handleTeamDragStart}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
       onDrop={handleTeamDrop}
     >
-      <div className="font-semibold mb-2">Previous Team ({team.players.length})</div>
+      <h3 className="text-center font-bold mb-2 text-xl">Previous Team</h3>
       <div className="space-y-2">
-        {team.players.map((player) => (
+        {team.players.map((player, playerIndex) => (
           <div
             key={player.id}
-            className={`p-2 bg-gray-100 rounded border ${manualMode && gameManualMode ? 'cursor-move' : ''}`}
-            draggable={manualMode && gameManualMode}
-            onDragStart={(e) => handlePlayerDragStart(e, player)}
-            onContextMenu={(e) => onContextMenu(e, player)}
+            className={`p-3 bg-gray-300 rounded text-center font-bold border-2 border-black text-lg ${
+              manualMode ? 'cursor-move hover:bg-gray-400 transition-colors duration-200' : ''
+            }`}
+            style={{
+              height: '42px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '100%',
+              transition: 'border-width 0.15s ease-in-out, border-color 0.15s ease-in-out'
+            }}
+            draggable={manualMode}
+            onDragStart={(e) => handlePlayerDragStart(e, player, playerIndex)}
+            onContextMenu={(e) => handlePlayerContextMenu(e, player)}
           >
             {player.name}
           </div>
         ))}
-        {team.players.length < 5 && manualMode && gameManualMode && (
-          <div className="p-2 bg-gray-100 rounded border-2 border-dashed border-gray-300 text-center text-sm text-gray-500">
-            Drop player here (max 5)
+        {/* Show drop zone if team is not full AND manual mode is on */}
+        {manualMode && team.players.length < 5 && (
+          <div
+            className={`p-3 border-dashed rounded text-center italic font-bold text-lg ${
+              isDragOverDropZone ? 'border-[6px] border-white bg-gray-600 text-white' : 'border-2 border-black bg-gray-600 text-white'
+            }`}
+            style={{
+              height: '42px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '100%',
+              transition: 'border-width 0.15s ease-in-out, border-color 0.15s ease-in-out'
+            }}
+            onDragOver={handleDropZoneDragOver}
+            onDragLeave={handleDropZoneDragLeave}
+            onDrop={handleTeamDrop}
+          >
+            Drop Zone
           </div>
         )}
       </div>

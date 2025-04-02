@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import { useGame } from '../../context/GameContext';
 import { Player } from '../../types';
+import PlayerSlot from './PlayerSlot';
+import Champions3Logo from '../../assets/images/Champions3.jpg';
+import Challengers3Logo from '../../assets/images/Challengers3.jpg';
 
 interface TeamBoxProps {
   title: string;
@@ -12,36 +15,54 @@ const TeamBox: React.FC<TeamBoxProps> = ({ title, team, type }) => {
   const { gameState, removePlayer, addPlayerToTeam } = useGame();
   const { manualMode } = gameState;
   const [isDragOver, setIsDragOver] = useState(false);
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; playerId: string } | null>(null);
+  const [dragSlotIndex, setDragSlotIndex] = useState<number | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; playerId: string; options: { label: string; action: () => void }[] } | null>(null);
 
   const handleRemovePlayer = (player: Player) => {
     removePlayer(player.id);
     setContextMenu(null);
   };
 
-  const handleDragOver = (e: React.DragEvent) => {
+  const handleBoxDragOver = (e: React.DragEvent) => {
     if (!manualMode) return;
     if (team.length >= 5) return;
 
     e.preventDefault();
+    e.stopPropagation();
     setIsDragOver(true);
+    setDragSlotIndex(team.length);
   };
 
-  const handleDragLeave = () => {
+  const handleBoxDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
     setIsDragOver(false);
+    setDragSlotIndex(null);
   };
 
-  const handleDrop = (e: React.DragEvent) => {
+  const handleBoxDrop = (e: React.DragEvent) => {
     if (!manualMode) return;
     if (team.length >= 5) return;
 
     e.preventDefault();
+    e.stopPropagation();
     setIsDragOver(false);
+    setDragSlotIndex(null);
 
     const playerId = e.dataTransfer.getData('playerId');
-    if (playerId) {
+    const playerType = e.dataTransfer.getData('type');
+    const sourceTeam = e.dataTransfer.getData('sourceTeam');
+    if (playerId && playerType === 'player' && sourceTeam !== type) {
       addPlayerToTeam(playerId, type);
     }
+  };
+
+  const handleSlotDragOver = (e: React.DragEvent) => {
+    handleBoxDragOver(e);
+  };
+
+  const handleSlotDrop = (e: React.DragEvent) => {
+    handleBoxDrop(e);
   };
 
   const handlePlayerDragStart = (e: React.DragEvent, player: Player) => {
@@ -55,12 +76,21 @@ const TeamBox: React.FC<TeamBoxProps> = ({ title, team, type }) => {
     e.dataTransfer.effectAllowed = 'move';
   };
 
-  const handleContextMenu = (e: React.MouseEvent, player: Player) => {
+  const handleContextMenu = (e: React.MouseEvent, playerId: string) => {
     e.preventDefault();
+    const player = team.find(p => p.id === playerId);
+    if (!player) return;
+    
     setContextMenu({
+      playerId,
       x: e.clientX,
       y: e.clientY,
-      playerId: player.id
+      options: [
+        {
+          label: `Remove ${player.name}`,
+          action: () => handleRemovePlayer(player),
+        },
+      ],
     });
   };
 
@@ -76,45 +106,76 @@ const TeamBox: React.FC<TeamBoxProps> = ({ title, team, type }) => {
   }, []);
 
   return (
-    <div
-      className={`p-4 rounded-lg border-2 ${
-        isDragOver ? 'border-blue-500 bg-blue-50' : 'border-gray-300'
-      }`}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
+    <div 
+      className={`rounded-lg p-4 shadow-sm ${
+        type === 'champions' 
+          ? isDragOver && manualMode ? 'bg-orange-300' : 'bg-orange-200' 
+          : isDragOver && manualMode ? 'bg-blue-300' : 'bg-blue-200'
+      } transition-colors duration-200`}
+      onDragOver={handleBoxDragOver}
+      onDragLeave={handleBoxDragLeave}
+      onDrop={handleBoxDrop}
     >
-      <h2 className="text-lg font-semibold mb-2">{title} ({team.length})</h2>
+      <div className="flex justify-center mb-3 mt-1">
+        <div style={{ 
+          backgroundColor: type === 'champions' ? 'rgb(254, 215, 170)' : undefined
+        }} className={type === 'challengers' ? 'bg-blue-200' : undefined}>
+          <img 
+            src={type === 'champions' ? Champions3Logo : Challengers3Logo} 
+            alt={type === 'champions' ? 'Champions' : 'Challengers'} 
+            className="h-36 object-contain"
+            style={{ 
+              mixBlendMode: type === 'champions' ? 'darken' : 'multiply'
+            }}
+          />
+        </div>
+      </div>
       <div className="space-y-2">
-        {team.map((player) => (
-          <div
+        {/* Render actual players */}
+        {team.map((player, index) => (
+          <PlayerSlot
             key={player.id}
-            className={`p-2 rounded border ${manualMode ? 'cursor-move' : ''}`}
-            draggable={manualMode}
-            onDragStart={(e) => handlePlayerDragStart(e, player)}
-            onContextMenu={(e) => handleContextMenu(e, player)}
-          >
-            {player.name}
-          </div>
+            player={player}
+            teamType={type}
+            manualMode={manualMode}
+            onDragStart={handlePlayerDragStart}
+            onContextMenu={handleContextMenu}
+            isDragOver={false}
+            onDragOver={handleSlotDragOver}
+            onDragLeave={handleBoxDragLeave}
+            onDrop={handleSlotDrop}
+          />
         ))}
-        {manualMode && team.length < 5 && (
-          <div className="p-2 rounded border-2 border-dashed border-gray-300 text-center text-gray-500">
-            Drop player here (max 5)
-          </div>
-        )}
+        
+        {/* Render empty slots */}
+        {team.length < 5 && Array(5 - team.length).fill(null).map((_, index) => (
+          <PlayerSlot
+            key={`empty-${index}`}
+            teamType={type}
+            manualMode={manualMode}
+            isDragOver={isDragOver && index === 0}
+            onDragOver={handleSlotDragOver}
+            onDragLeave={handleBoxDragLeave}
+            onDrop={handleSlotDrop}
+          />
+        ))}
       </div>
 
+      {/* Context Menu */}
       {contextMenu && (
         <div
-          className="fixed bg-white shadow-lg border rounded py-1 z-50"
+          className="fixed z-50 bg-white shadow-lg rounded-md border border-gray-200 py-1 min-w-[150px]"
           style={{ top: contextMenu.y, left: contextMenu.x }}
         >
-          <button
-            className="w-full px-4 py-2 text-left hover:bg-gray-100"
-            onClick={() => handleRemovePlayer(team.find(p => p.id === contextMenu.playerId)!)}
-          >
-            Remove Player
-          </button>
+          {contextMenu.options.map((option, index) => (
+            <button
+              key={index}
+              onClick={option.action}
+              className="w-full text-center px-4 py-2 hover:bg-gray-100 text-red-600 font-bold text-base"
+            >
+              {option.label}
+            </button>
+          ))}
         </div>
       )}
     </div>

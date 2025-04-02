@@ -14,6 +14,7 @@ export interface GameContextProps {
   setGameState: React.Dispatch<React.SetStateAction<GameState>>;
   addPlayer: (name: string) => void;
   removePlayer: (idOrName: string) => void;
+  removePlayerByName: (playerName: string) => void;
   movePlayer: (playerId: string, targetIndex: number) => void;
   moveTeam: (teamId: string, targetIndex: number) => void;
   addPlayerToTeam: (playerId: string, targetTeam: 'champions' | 'challengers') => void;
@@ -26,6 +27,8 @@ export interface GameContextProps {
     isOpen: boolean;
     message: string;
   };
+  errorMessage: string | null;
+  setErrorMessage: React.Dispatch<React.SetStateAction<string | null>>;
 }
 
 const defaultGameState: GameState = {
@@ -59,6 +62,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     isOpen: false,
     message: '',
   });
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Track replacements separately from main game state
   const [replacementTracking, setReplacementTracking] = useState<{
@@ -89,8 +93,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       ...gameState.waitingQueue.flatMap(item => isPreviousTeam(item) ? item.players : [item])
     ];
     if (allPlayers.some(p => p.name.toLowerCase() === trimmedName.toLowerCase())) {
-      showNotification(`Player "${trimmedName}" already exists.`, 'error');
-      return;
+      throw new Error(`Player "${trimmedName}" already exists.`);
     }
 
     const newPlayer: Player = {
@@ -128,17 +131,35 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const removePlayer = useCallback((idOrName: string) => {
     console.log("[removePlayer] Attempting to remove player:", idOrName);
 
+    let playerFound = false;
+
     setGameState(prev => {
+      // Calculate total players in the system
+      const totalPlayers = prev.champions.length + prev.challengers.length + 
+        prev.waitingQueue.reduce((acc, item) => {
+          if (!isPreviousTeam(item)) {
+            return acc + 1;
+          } else {
+            return acc + item.players.length;
+          }
+        }, 0);
+
+      console.log("[removePlayer] Total players in system:", totalPlayers);
+      const shouldEnableManualMode = totalPlayers > 10;
+
       // Try to find and remove from champions
       const championsIndex = prev.champions.findIndex(p => p.id === idOrName || p.name === idOrName);
       if (championsIndex !== -1) {
         console.log("[removePlayer] Found and removing", prev.champions[championsIndex].name, "from Champions");
+        playerFound = true;
         
-        // Enable manual mode and show notification
-        setInfoModalState({
-          isOpen: true,
-          message: "Manual Mode enabled. Please drag a player from the waiting queue to the Champions team, then turn off manual mode to continue."
-        });
+        // Only show notification and enable manual mode if there are more than 10 players
+        if (shouldEnableManualMode && !prev.manualMode) {
+          setInfoModalState({
+            isOpen: true,
+            message: "Manual mode enabled. Please drag a player from the waiting queue to the Champions team, then turn off manual mode to continue."
+          });
+        }
 
         return {
           ...prev,
@@ -146,8 +167,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
             ...prev.champions.slice(0, championsIndex),
             ...prev.champions.slice(championsIndex + 1)
           ],
-          manualMode: true,
-          status: 'WAITING_FOR_MANUAL_REPLACEMENT'
+          manualMode: shouldEnableManualMode,
+          status: shouldEnableManualMode ? 'WAITING_FOR_MANUAL_REPLACEMENT' : 'INITIAL'
         };
       }
 
@@ -155,12 +176,15 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       const challengersIndex = prev.challengers.findIndex(p => p.id === idOrName || p.name === idOrName);
       if (challengersIndex !== -1) {
         console.log("[removePlayer] Found and removing", prev.challengers[challengersIndex].name, "from Challengers");
+        playerFound = true;
         
-        // Enable manual mode and show notification
-        setInfoModalState({
-          isOpen: true,
-          message: "Manual Mode enabled. Please drag a player from the waiting queue to the Challengers team, then turn off manual mode to continue."
-        });
+        // Only show notification and enable manual mode if there are more than 10 players
+        if (shouldEnableManualMode && !prev.manualMode) {
+          setInfoModalState({
+            isOpen: true,
+            message: "Manual mode enabled. Please drag a player from the waiting queue to the Challengers team, then turn off manual mode to continue."
+          });
+        }
 
         return {
           ...prev,
@@ -168,12 +192,13 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
             ...prev.challengers.slice(0, challengersIndex),
             ...prev.challengers.slice(challengersIndex + 1)
           ],
-          manualMode: true,
-          status: 'WAITING_FOR_MANUAL_REPLACEMENT'
+          manualMode: shouldEnableManualMode,
+          status: shouldEnableManualMode ? 'WAITING_FOR_MANUAL_REPLACEMENT' : 'INITIAL'
         };
       }
 
       // Try to find and remove from waiting queue
+      let foundInQueue = false;
       const newQueue = prev.waitingQueue.reduce<WaitingQueueItem[]>((acc, item) => {
         if (!isPreviousTeam(item)) {
           // Individual player
@@ -181,6 +206,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
             acc.push(item);
           } else {
             console.log("[removePlayer] Found and removing individual player from queue:", item.name);
+            foundInQueue = true;
+            playerFound = true;
           }
         } else {
           // Previous team - remove player if found, or keep whole team if not
@@ -191,6 +218,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           
           if (teamWithoutPlayer.players.length !== item.players.length) {
             console.log("[removePlayer] Found and removing player from PreviousTeam ID:", item.id);
+            foundInQueue = true;
+            playerFound = true;
             if (teamWithoutPlayer.players.length > 0) {
               acc.push(teamWithoutPlayer);
             }
@@ -198,104 +227,130 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
             acc.push(item);
           }
         }
-
         return acc;
       }, []);
 
-      return {
-        ...prev,
-        waitingQueue: newQueue
-      };
+      if (foundInQueue) {
+        return {
+          ...prev,
+          waitingQueue: newQueue
+        };
+      }
+
+      return prev;
     });
+
+    // If player wasn't found anywhere, show error modal
+    if (!playerFound) {
+      setErrorMessage(`${idOrName} is not an active player.`);
+    }
   }, [setInfoModalState]);
+
+  // Remove player by name
+  const removePlayerByName = useCallback((playerName: string) => {
+    // Check if player exists in any team or queue
+    const playerExists = gameState.champions.some(p => p.name === playerName) ||
+      gameState.challengers.some(p => p.name === playerName) ||
+      gameState.waitingQueue.some(item => 
+        !isPreviousTeam(item) ? item.name === playerName :
+        item.players.some(p => p.name === playerName)
+      );
+
+    if (!playerExists) {
+      setErrorMessage(`Player ${playerName} is not currently in the system.`);
+      return;
+    }
+
+    // If player exists, find their ID and remove them
+    const findPlayer = (name: string): string | undefined => {
+      const player = [...gameState.champions, ...gameState.challengers].find(p => p.name === name) ||
+        gameState.waitingQueue.find(item => !isPreviousTeam(item) && item.name === name) ||
+        gameState.waitingQueue
+          .filter(isPreviousTeam)
+          .flatMap(team => team.players)
+          .find(p => p.name === name);
+      return player?.id;
+    };
+
+    const playerId = findPlayer(playerName);
+    if (playerId) {
+      removePlayer(playerId);
+    }
+  }, [gameState, removePlayer]);
 
   // Move player to a new position in the waiting queue or teams
   const movePlayer = useCallback((playerId: string, targetIndex: number) => {
-    setGameState(prev => {
+    setGameState(prevState => {
+      // First, find and remove the player from their current position
       let playerToMove: Player | null = null;
-      let sourceLocation: 'champions' | 'challengers' | 'waitingQueue' | 'team' = 'waitingQueue';
-      let sourceIndex: number | null = null;
-      let sourceTeamId: string | null = null;
+      let newWaitingQueue = [...prevState.waitingQueue];
+      let newChampions = [...prevState.champions];
+      let newChallengers = [...prevState.challengers];
+      let originalIndex = -1; // Track the original position in the queue
 
       // Check champions
-      const championsIndex = prev.champions.findIndex(p => p.id === playerId);
+      const championsIndex = newChampions.findIndex(p => p.id === playerId);
       if (championsIndex !== -1) {
-        playerToMove = prev.champions[championsIndex];
-        sourceLocation = 'champions';
-        sourceIndex = championsIndex;
+        playerToMove = newChampions[championsIndex];
+        newChampions.splice(championsIndex, 1);
       }
 
-      // Check challengers
+      // Check challengers if not found in champions
       if (!playerToMove) {
-        const challengersIndex = prev.challengers.findIndex(p => p.id === playerId);
+        const challengersIndex = newChallengers.findIndex(p => p.id === playerId);
         if (challengersIndex !== -1) {
-          playerToMove = prev.challengers[challengersIndex];
-          sourceLocation = 'challengers';
-          sourceIndex = challengersIndex;
+          playerToMove = newChallengers[challengersIndex];
+          newChallengers.splice(challengersIndex, 1);
         }
       }
 
-      // Check waiting queue for individual players
+      // If not found in teams, check waiting queue
       if (!playerToMove) {
-        const queueIndex = prev.waitingQueue.findIndex(item => !isPreviousTeam(item) && item.id === playerId);
-        if (queueIndex !== -1) {
-          playerToMove = prev.waitingQueue[queueIndex] as Player;
-          sourceLocation = 'waitingQueue';
-          sourceIndex = queueIndex;
-        }
-      }
-
-      // Check waiting queue for players in teams
-      if (!playerToMove) {
-        for (let i = 0; i < prev.waitingQueue.length; i++) {
-          const item = prev.waitingQueue[i];
+        for (let i = 0; i < newWaitingQueue.length; i++) {
+          const item = newWaitingQueue[i];
           if (isPreviousTeam(item)) {
             const playerIndex = item.players.findIndex(p => p.id === playerId);
             if (playerIndex !== -1) {
               playerToMove = item.players[playerIndex];
-              sourceLocation = 'team';
-              sourceIndex = playerIndex;
-              sourceTeamId = item.id;
+              // Remove player from previous team
+              const newTeam = {
+                ...item,
+                players: item.players.filter(p => p.id !== playerId)
+              };
+              // If team is now empty, remove it entirely
+              if (newTeam.players.length === 0) {
+                newWaitingQueue.splice(i, 1);
+                originalIndex = i; // Remember where the player was
+              } else {
+                newWaitingQueue[i] = newTeam;
+              }
               break;
             }
+          } else if (item.id === playerId) {
+            playerToMove = newWaitingQueue.splice(i, 1)[0] as Player;
+            originalIndex = i; // Remember where the player was
+            break;
           }
         }
       }
 
       if (!playerToMove) {
-        console.error('Player not found for moving');
-        return prev;
+        console.error('Player not found');
+        return prevState;
       }
 
-      // Remove player from source
-      let newChampions = [...prev.champions];
-      let newChallengers = [...prev.challengers];
-      let newWaitingQueue = [...prev.waitingQueue];
-
-      if (sourceLocation === 'champions') {
-        newChampions.splice(sourceIndex!, 1);
-      } else if (sourceLocation === 'challengers') {
-        newChallengers.splice(sourceIndex!, 1);
-      } else if (sourceLocation === 'waitingQueue') {
-        newWaitingQueue.splice(sourceIndex!, 1);
-      } else if (sourceLocation === 'team' && sourceTeamId) {
-        const teamIndex = newWaitingQueue.findIndex(item => isPreviousTeam(item) && item.id === sourceTeamId);
-        if (teamIndex !== -1) {
-          const team = newWaitingQueue[teamIndex] as PreviousTeam;
-          const newPlayers = team.players.filter(p => p.id !== playerId);
-          if (newPlayers.length > 0) {
-            newWaitingQueue[teamIndex] = { ...team, players: newPlayers };
-          } else {
-            newWaitingQueue.splice(teamIndex, 1);
-          }
-        }
+      // Adjust target index if moving within the same queue
+      // If we're moving from earlier in the queue to later, we need to decrease the target index
+      // because removing the item shifts everything down by one
+      if (originalIndex !== -1 && originalIndex < targetIndex) {
+        targetIndex--;
       }
 
-      // Insert player at target position
+      // Insert the player at the target position
       newWaitingQueue.splice(targetIndex, 0, playerToMove);
 
       return {
-        ...prev,
+        ...prevState,
         champions: newChampions,
         challengers: newChallengers,
         waitingQueue: newWaitingQueue
@@ -326,33 +381,44 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  // Add player to a team (champions or challengers)
+  // Add player to a specific team (champions or challengers)
   const addPlayerToTeam = useCallback((playerId: string, targetTeam: 'champions' | 'challengers') => {
     setGameState(prev => {
       let playerToMove: Player | null = null;
+      let sourceTeam: 'champions' | 'challengers' | null = null;
       let sourceIndex: number | null = null;
       let sourceTeamId: string | null = null;
 
-      // Find player in waiting queue (individual or in team)
-      for (let i = 0; i < prev.waitingQueue.length; i++) {
-        const item = prev.waitingQueue[i];
-        if (isPreviousTeam(item)) {
-          const playerIndex = item.players.findIndex(p => p.id === playerId);
-          if (playerIndex !== -1) {
-            playerToMove = item.players[playerIndex];
-            sourceTeamId = item.id;
+      // First check teams
+      if (prev.champions.some(p => p.id === playerId)) {
+        sourceTeam = 'champions';
+        playerToMove = prev.champions.find(p => p.id === playerId)!;
+      } else if (prev.challengers.some(p => p.id === playerId)) {
+        sourceTeam = 'challengers';
+        playerToMove = prev.challengers.find(p => p.id === playerId)!;
+      } else {
+        // Check waiting queue
+        for (let i = 0; i < prev.waitingQueue.length; i++) {
+          const item = prev.waitingQueue[i];
+          if (isPreviousTeam(item)) {
+            const player = item.players.find(p => p.id === playerId);
+            if (player) {
+              playerToMove = player;
+              sourceIndex = i;
+              sourceTeamId = item.id;
+              break;
+            }
+          } else if (item.id === playerId) {
+            // Don't splice yet, just store the reference
+            playerToMove = item as Player;
             sourceIndex = i;
             break;
           }
-        } else if (item.id === playerId) {
-          playerToMove = item;
-          sourceIndex = i;
-          break;
         }
       }
 
       if (!playerToMove) {
-        console.error('Player not found for moving to team');
+        console.error('Player not found for moving to team:', playerId);
         return prev;
       }
 
@@ -363,27 +429,48 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         return prev;
       }
 
-      // Remove from source
-      const newWaitingQueue = [...prev.waitingQueue];
-      if (sourceTeamId) {
-        const team = newWaitingQueue[sourceIndex!] as PreviousTeam;
-        const newPlayers = team.players.filter(p => p.id !== playerId);
-        if (newPlayers.length > 0) {
-          newWaitingQueue[sourceIndex!] = { ...team, players: newPlayers };
+      // Create new state with player removed from source
+      let newState = { ...prev };
+
+      // Remove from source location
+      if (sourceTeam) {
+        if (sourceTeam === 'champions') {
+          newState.champions = prev.champions.filter(p => p.id !== playerId);
         } else {
-          newWaitingQueue.splice(sourceIndex!, 1);
+          newState.challengers = prev.challengers.filter(p => p.id !== playerId);
         }
-      } else {
-        newWaitingQueue.splice(sourceIndex!, 1);
+      } else if (sourceIndex !== null) {
+        const newWaitingQueue = [...prev.waitingQueue];
+        if (sourceTeamId) {
+          // Remove from previous team in queue
+          const team = newWaitingQueue[sourceIndex] as PreviousTeam;
+          const newPlayers = team.players.filter(p => p.id !== playerId);
+          if (newPlayers.length > 0) {
+            newWaitingQueue[sourceIndex] = { ...team, players: newPlayers };
+          } else {
+            newWaitingQueue.splice(sourceIndex, 1);
+          }
+        } else {
+          // Remove individual player from queue only after we know they can be added
+          newWaitingQueue.splice(sourceIndex, 1);
+        }
+        newState.waitingQueue = newWaitingQueue;
       }
 
       // Add to target team
-      const newState = {
-        ...prev,
-        waitingQueue: newWaitingQueue,
-        champions: targetTeam === 'champions' ? [...prev.champions, playerToMove] : prev.champions,
-        challengers: targetTeam === 'challengers' ? [...prev.challengers, playerToMove] : prev.challengers
-      };
+      if (targetTeam === 'champions') {
+        newState.champions = [...newState.champions, playerToMove];
+      } else {
+        newState.challengers = [...newState.challengers, playerToMove];
+      }
+
+      // If we were waiting for a manual replacement, check if we can turn off manual mode
+      if (prev.status === 'WAITING_FOR_MANUAL_REPLACEMENT') {
+        if (prev.champions.length === 5 && prev.challengers.length === 5) {
+          newState.manualMode = false;
+          newState.status = 'READY';
+        }
+      }
 
       return newState;
     });
@@ -575,9 +662,13 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       console.log("[confirmShootout - Step 4] Final Challengers Team:", challengers);
 
       // Create new queue:
-      // 1. Add shootout losers as a team if more than 1, otherwise as individuals
-      // 2. Add any remaining items that were after the shootout team
+      // 1. Add any individual players that were before the shootout team
+      // 2. Add shootout losers as a team if more than 1, otherwise as individuals
+      // 3. Add any remaining items that were after the shootout team
       let newQueue: WaitingQueueItem[] = [];
+      
+      // Add individual players that were before the shootout team
+      newQueue.push(...pendingIndividuals);
       
       // Add shootout losers
       if (shootoutLosers.length > 1) {
@@ -651,16 +742,37 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   // Handle game end
   const handleGameEnd = (winner: 'champions' | 'challengers') => {
-    // Check if the game is in a state where it can end (e.g., teams are full)
-    if (gameState.status !== 'READY' && gameState.status !== 'WAITING_FOR_PLAYERS') {
-        showNotification(`Cannot end game. Status is: ${gameState.status}`, 'error');
-        console.warn(`[endGame] Attempted to end game with status: ${gameState.status}. Aborted.`);
-        return;
-    }
+    // First check if teams are complete
     if (gameState.champions.length !== 5 || gameState.challengers.length !== 5) {
-        showNotification("Both teams must have 5 players to end the game.", 'error');
-        console.warn(`[endGame] Attempted to end game with incomplete teams (Champs: ${gameState.champions.length}, Chall: ${gameState.challengers.length}). Aborted.`);
-        return;
+      showNotification("Both teams must have 5 players to end the game.", 'error');
+      console.warn(`[endGame] Attempted to end game with incomplete teams (Champs: ${gameState.champions.length}, Chall: ${gameState.challengers.length}). Aborted.`);
+      return;
+    }
+
+    // If we're in WAITING_FOR_MANUAL_REPLACEMENT state but teams are full, 
+    // force-reset to READY state before processing the game end
+    if (gameState.status === 'WAITING_FOR_MANUAL_REPLACEMENT') {
+      console.log('[endGame] Detected full teams while in WAITING_FOR_MANUAL_REPLACEMENT state. Auto-resetting to READY.');
+      setGameState(prev => ({
+        ...prev,
+        status: 'READY',
+        manualMode: false
+      }));
+      // Small delay to ensure state update is processed
+      setTimeout(() => {
+        const winningTeam = winner === 'champions' ? gameState.champions : gameState.challengers;
+        const losingTeam = winner === 'champions' ? gameState.challengers : gameState.champions;
+        processGameEnd(winningTeam, losingTeam);
+      }, 50);
+      return;
+    }
+
+    // For other states, maintain the existing checks
+    if (gameState.status !== 'READY' && gameState.status !== 'WAITING_FOR_PLAYERS') {
+      // Changed from showNotification to setErrorMessage to avoid toast
+      setErrorMessage(`Cannot end game. Status is: ${gameState.status}`);
+      console.warn(`[endGame] Attempted to end game with status: ${gameState.status}. Aborted.`);
+      return;
     }
 
     console.log(`[endGame] Received command: ${winner} won.`);
@@ -682,6 +794,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setGameState,
     addPlayer,
     removePlayer,
+    removePlayerByName,
     movePlayer,
     moveTeam,
     addPlayerToTeam,
@@ -691,6 +804,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     dismissShootoutModal,
     dismissInfoModal,
     infoModalState,
+    errorMessage,
+    setErrorMessage
   };
 
   return (
