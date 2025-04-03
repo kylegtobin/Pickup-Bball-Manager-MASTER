@@ -1,4 +1,4 @@
-import React, { createContext, useState, useContext, ReactNode, useCallback, useEffect } from 'react';
+import React, { createContext, useState, useContext, ReactNode, useCallback, useEffect, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { Player, PreviousTeam, WaitingQueueItem, GameState } from '../types'; 
 import { useToast } from '../components/ui/Toast'; 
@@ -29,6 +29,8 @@ export interface GameContextProps {
   };
   errorMessage: string | null;
   setErrorMessage: React.Dispatch<React.SetStateAction<string | null>>;
+  startGameTimer: () => void;
+  stopGameTimer: () => void;
 }
 
 const defaultGameState: GameState = {
@@ -48,7 +50,9 @@ const defaultGameState: GameState = {
   selectedShootoutPlayers: [],
   replacementTracking: {
     replacements: []
-  }
+  },
+  gameStartTime: null,
+  elapsedMinutes: 0
 };
 
 // Create the context
@@ -237,14 +241,30 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         };
       }
 
+      // If we've reached this point and playerFound is still false,
+      // then the player wasn't found in this current state
+      if (!playerFound) {
+        // Delay this check to ensure we properly check after state updates
+        setTimeout(() => {
+          // Double check if the player exists in any team or queue
+          const playerExistsInCurrentState = 
+            gameState.champions.some(p => p.id === idOrName || p.name === idOrName) ||
+            gameState.challengers.some(p => p.id === idOrName || p.name === idOrName) ||
+            gameState.waitingQueue.some(item => 
+              !isPreviousTeam(item) 
+                ? (item.id === idOrName || item.name === idOrName)
+                : item.players.some(p => p.id === idOrName || p.name === idOrName)
+            );
+          
+          if (!playerExistsInCurrentState) {
+            setErrorMessage(`${idOrName} is not an active player.`);
+          }
+        }, 0);
+      }
+
       return prev;
     });
-
-    // If player wasn't found anywhere, show error modal
-    if (!playerFound) {
-      setErrorMessage(`${idOrName} is not an active player.`);
-    }
-  }, [setInfoModalState]);
+  }, [gameState, setInfoModalState]);
 
   // Remove player by name
   const removePlayerByName = useCallback((playerName: string) => {
@@ -327,8 +347,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
               break;
             }
           } else if (item.id === playerId) {
-            playerToMove = newWaitingQueue.splice(i, 1)[0] as Player;
-            originalIndex = i; // Remember where the player was
+            // Don't splice yet, just store the reference
+            playerToMove = item;
+            originalIndex = i;
             break;
           }
         }
@@ -409,8 +430,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
               break;
             }
           } else if (item.id === playerId) {
-            // Don't splice yet, just store the reference
-            playerToMove = item as Player;
+            // Don't modify the array here, just store the reference
+            playerToMove = item;
             sourceIndex = i;
             break;
           }
@@ -633,6 +654,13 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   // Step 4: Handle Shootout Confirmation
   const confirmShootout = useCallback((selectedPlayers: Player[]) => {
+    console.log("[confirmShootout] Confirming shootout with players:", selectedPlayers);
+    
+    if (selectedPlayers.length !== gameState.requiredPlayers) {
+      setErrorMessage(`You must select exactly ${gameState.requiredPlayers} players.`);
+      return;
+    }
+    
     setGameState(prev => {
       if (!prev.shootoutTeam) return prev;
 
@@ -688,7 +716,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
       console.log("[confirmShootout - Step 4] Final Waiting Queue:", newQueue);
       console.log("[confirmShootout - Step 4] Setting status to READY");
-
+      
       return {
         ...prev,
         challengers,
@@ -696,10 +724,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         status: 'READY',
         showShootoutModal: false,
         shootoutTeam: null,
-        requiredPlayers: 0
+        requiredPlayers: 0,
+        selectedShootoutPlayers: []
       };
     });
-  }, []);
+  }, [gameState.requiredPlayers, setErrorMessage]);
 
   // Toggle Manual Mode
   const toggleManualMode = useCallback(() => {
@@ -749,6 +778,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
+    // Stop the game timer
+    stopGameTimer();
+
     // If we're in WAITING_FOR_MANUAL_REPLACEMENT state but teams are full, 
     // force-reset to READY state before processing the game end
     if (gameState.status === 'WAITING_FOR_MANUAL_REPLACEMENT') {
@@ -756,7 +788,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       setGameState(prev => ({
         ...prev,
         status: 'READY',
-        manualMode: false
+        manualMode: false,
+        gameStartTime: null,
+        elapsedMinutes: 0
       }));
       // Small delay to ensure state update is processed
       setTimeout(() => {
@@ -779,6 +813,13 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const winningTeam = winner === 'champions' ? gameState.champions : gameState.challengers;
     const losingTeam = winner === 'champions' ? gameState.challengers : gameState.champions;
 
+    // Reset timer state before processing game end
+    setGameState(prev => ({
+      ...prev,
+      gameStartTime: null,
+      elapsedMinutes: 0
+    }));
+
     processGameEnd(winningTeam, losingTeam); // Start the multi-step process
   };
 
@@ -788,6 +829,68 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       showShootoutModal: false
     }));
   }, []);
+
+  const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Timer functionality to track elapsed minutes
+  const startGameTimer = useCallback(() => {
+    // Clear any existing timer
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current);
+    }
+
+    // Set the game start time to now
+    const now = Date.now();
+    setGameState(prev => ({
+      ...prev,
+      gameStartTime: now,
+      elapsedMinutes: 0
+    }));
+
+    // Start a timer that updates elapsed minutes every minute
+    timerIntervalRef.current = setInterval(() => {
+      setGameState(prev => {
+        if (!prev.gameStartTime) return prev;
+        
+        // Calculate elapsed minutes, capped at 12
+        const elapsedMs = Date.now() - prev.gameStartTime;
+        const minutes = Math.min(12, Math.floor(elapsedMs / (1000 * 60)));
+        
+        return {
+          ...prev,
+          elapsedMinutes: minutes
+        };
+      });
+    }, 60000); // Update every minute
+  }, []);
+
+  // Stop the game timer
+  const stopGameTimer = useCallback(() => {
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current);
+      timerIntervalRef.current = null;
+    }
+  }, []);
+
+  // Clean up timer on unmount
+  useEffect(() => {
+    return () => {
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+      }
+    };
+  }, []);
+
+  // Start timer when game status changes to READY
+  useEffect(() => {
+    if (gameState.status === 'READY' && 
+        gameState.champions.length === 5 && 
+        gameState.challengers.length === 5 &&
+        !gameState.gameStartTime) {
+      console.log("[GameTimer] Starting timer for new game");
+      startGameTimer();
+    }
+  }, [gameState.status, gameState.champions.length, gameState.challengers.length, gameState.gameStartTime, startGameTimer]);
 
   const value: GameContextProps = {
     gameState,
@@ -805,7 +908,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     dismissInfoModal,
     infoModalState,
     errorMessage,
-    setErrorMessage
+    setErrorMessage,
+    startGameTimer,
+    stopGameTimer
   };
 
   return (

@@ -104,14 +104,16 @@ const PreviousTeam: React.FC<PreviousTeamProps> = ({
 
   const handleTeamDrop = (e: React.DragEvent) => {
     if (!manualMode) return;
-    if (team.players.length >= 5) return;
-
+    
     e.preventDefault();
     e.stopPropagation(); // Prevent the drop from bubbling to the queue
     
     // Reset all highlighting states immediately
     setIsDragOver(false);
     setIsDragOverDropZone(false);
+
+    // Check team size after highlight reset
+    if (team.players.length >= 5) return;
 
     const type = e.dataTransfer.getData('type');
     const playerId = e.dataTransfer.getData('playerId');
