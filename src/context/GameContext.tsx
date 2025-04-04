@@ -8,6 +8,69 @@ export const isPreviousTeam = (item: WaitingQueueItem): item is PreviousTeam => 
   return typeof item === 'object' && item !== null && 'type' in item && item.type === 'PreviousTeam';
 };
 
+// Helper function to check for duplicate player IDs across all teams and queue
+const checkForDuplicatePlayers = (state: GameState): { hasDuplicates: boolean, duplicateIds: string[] } => {
+  const allPlayers: Player[] = [];
+  const playerIds = new Set<string>();
+  const duplicateIds: string[] = [];
+  
+  // Add champions
+  state.champions.forEach(player => {
+    if (playerIds.has(player.id)) {
+      duplicateIds.push(player.id);
+    } else {
+      playerIds.add(player.id);
+    }
+    allPlayers.push(player);
+  });
+  
+  // Add challengers
+  state.challengers.forEach(player => {
+    if (playerIds.has(player.id)) {
+      duplicateIds.push(player.id);
+    } else {
+      playerIds.add(player.id);
+    }
+    allPlayers.push(player);
+  });
+  
+  // Add waiting queue
+  state.waitingQueue.forEach(item => {
+    if (!isPreviousTeam(item)) {
+      // Individual player
+      if (playerIds.has(item.id)) {
+        duplicateIds.push(item.id);
+      } else {
+        playerIds.add(item.id);
+      }
+      allPlayers.push(item);
+    } else {
+      // Team of players
+      item.players.forEach(player => {
+        if (playerIds.has(player.id)) {
+          duplicateIds.push(player.id);
+        } else {
+          playerIds.add(player.id);
+        }
+        allPlayers.push(player);
+      });
+    }
+  });
+  
+  return { 
+    hasDuplicates: duplicateIds.length > 0,
+    duplicateIds
+  };
+};
+
+// Helper function to create a deep clone of a player with a new ID
+const clonePlayerWithNewId = (player: Player): Player => {
+  return {
+    ...player,
+    id: uuidv4() // Generate a new ID to ensure uniqueness
+  };
+};
+
 // Define the shape of the context value
 export interface GameContextProps {
   gameState: GameState;
@@ -120,7 +183,33 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
         // Check if we can start the game
         if (updatedState.champions.length === 5 && updatedState.challengers.length === 5) {
+          console.log("[addPlayer] Both teams filled with 5 players each. Starting game and timer.");
           updatedState.status = 'READY';
+          // Set the game start time immediately rather than waiting for the effect
+          const now = Date.now();
+          updatedState.gameStartTime = now;
+          updatedState.elapsedMinutes = 0;
+          
+          // Start the interval timer in the next tick to avoid potential state conflicts
+          setTimeout(() => {
+            if (timerIntervalRef.current) {
+              clearInterval(timerIntervalRef.current);
+            }
+            timerIntervalRef.current = setInterval(() => {
+              setGameState(prev => {
+                if (!prev.gameStartTime) return prev;
+                
+                // Calculate elapsed minutes, capped at 12
+                const elapsedMs = Date.now() - prev.gameStartTime;
+                const minutes = Math.min(12, Math.floor(elapsedMs / (1000 * 60)));
+                
+                return {
+                  ...prev,
+                  elapsedMinutes: minutes
+                };
+              });
+            }, 60000); // Update every minute
+          }, 0);
         }
       } else {
         // In any other state, add to waiting queue
@@ -347,9 +436,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
               break;
             }
           } else if (item.id === playerId) {
-            // Don't splice yet, just store the reference
+            // Individual player in the queue - save the player and its position
             playerToMove = item;
             originalIndex = i;
+            // Remove the player from the waiting queue
+            newWaitingQueue.splice(i, 1);
             break;
           }
         }
@@ -357,6 +448,15 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
       if (!playerToMove) {
         console.error('Player not found');
+        return prevState;
+      }
+
+      // If we're trying to move a player to exactly where it already is, just return the state
+      // This prevents duplication when dragging and dropping in the same spot
+      if (originalIndex === targetIndex) {
+        console.log('Moving player to same position, no change needed');
+        // Put the player back in the original position
+        newWaitingQueue.splice(originalIndex, 0, playerToMove);
         return prevState;
       }
 
@@ -581,6 +681,42 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     console.log("[useEffect - Step 3] Forming Challengers");
     console.log("[useEffect - Step 3] Processing Queue:", gameState.waitingQueue);
 
+    // First, check for any duplicate players and fix them
+    const { hasDuplicates, duplicateIds } = checkForDuplicatePlayers(gameState);
+    if (hasDuplicates) {
+      console.log("[useEffect - Step 3] Fixing duplicate player IDs:", duplicateIds);
+      
+      // If duplicates are found, regenerate IDs to ensure uniqueness
+      setGameState(prev => {
+        // Deep clone the waiting queue to fix duplicates
+        const newQueue = prev.waitingQueue.map(item => {
+          if (!isPreviousTeam(item)) {
+            // For individual players, check if they have a duplicate ID
+            if (duplicateIds.includes(item.id)) {
+              return clonePlayerWithNewId(item);
+            }
+            return item;
+          } else {
+            // For teams, check each player
+            return {
+              ...item,
+              players: item.players.map(player => 
+                duplicateIds.includes(player.id) ? clonePlayerWithNewId(player) : player
+              )
+            };
+          }
+        });
+        
+        return {
+          ...prev,
+          waitingQueue: newQueue
+        };
+      });
+      
+      // Exit early - the effect will run again after state update
+      return;
+    }
+
     const pendingChallengers: Player[] = [];
     let remainingQueue = [...gameState.waitingQueue];
 
@@ -590,9 +726,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       remainingQueue = remainingQueue.slice(1); // Remove the processed item
 
       if (!isPreviousTeam(item)) {
-        // Handle individual player
+        // Handle individual player - Create a deep copy to prevent reference issues
         console.log("[useEffect - Step 3] Taking individual player:", item.name);
-        pendingChallengers.push(item);
+        pendingChallengers.push({...item}); // Create a new object to avoid reference issues
         console.log("[useEffect - Step 3] Challengers in progress:", pendingChallengers.length + "/5");
       } else {
         // Handle team
@@ -600,10 +736,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         const remainingSpots = 5 - pendingChallengers.length;
 
         if (item.players.length <= remainingSpots) {
-          // Take all players from the team
+          // Take all players from the team - Create deep copies
           console.log("[useEffect - Step 3] Taking all " + item.players.length + " players from team" + 
                      (item.players.length < remainingSpots ? " (not enough to finish)." : "."));
-          pendingChallengers.push(...item.players);
+          pendingChallengers.push(...item.players.map(player => ({...player}))); // Create new objects
           console.log("[useEffect - Step 3] Challengers in progress:", pendingChallengers.length + "/5");
         } else {
           // Need shootout
@@ -619,37 +755,18 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
             status: 'SHOOTOUT',
             selectedShootoutPlayers: [], // Reset selected players
           }));
-          return;
+          return; // Exit early
         }
       }
     }
 
-    // After processing all items, update state based on result
-    if (pendingChallengers.length === 5) {
-      // We have exactly 5 players, no shootout needed
-      setGameState(prev => ({
-        ...prev,
-        challengers: pendingChallengers,
-        waitingQueue: remainingQueue,
-        status: 'READY',
-        shootoutTeam: null,
-        requiredPlayers: 0,
-        showShootoutModal: false,
-        selectedShootoutPlayers: [],
-      }));
-    } else if (pendingChallengers.length < 5) {
-      // Not enough players
-      setGameState(prev => ({
-        ...prev,
-        challengers: pendingChallengers,
-        waitingQueue: remainingQueue,
-        status: 'WAITING_FOR_PLAYERS',
-        shootoutTeam: null,
-        requiredPlayers: 0,
-        showShootoutModal: false,
-        selectedShootoutPlayers: [],
-      }));
-    }
+    // If we got here, we have enough players for both teams
+    setGameState(prev => ({
+      ...prev,
+      challengers: pendingChallengers,
+      waitingQueue: remainingQueue,
+      status: 'READY',
+    }));
   }, [gameState.status, gameState.waitingQueue]);
 
   // Step 4: Handle Shootout Confirmation
@@ -685,8 +802,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
       // Form final challengers team:
       // Start with existing challengers (players collected before shootout)
-      // and add selected players from shootout
-      const challengers = [...prev.challengers, ...selectedPlayers];
+      // and add selected players from shootout - making deep copies to prevent reference issues
+      const challengers = [
+        ...prev.challengers.map(player => ({...player})),
+        ...selectedPlayers.map(player => ({...player}))
+      ];
       console.log("[confirmShootout - Step 4] Final Challengers Team:", challengers);
 
       // Create new queue:
@@ -695,24 +815,77 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       // 3. Add any remaining items that were after the shootout team
       let newQueue: WaitingQueueItem[] = [];
       
-      // Add individual players that were before the shootout team
-      newQueue.push(...pendingIndividuals);
+      // Add individual players that were before the shootout team - with deep copies
+      newQueue.push(...pendingIndividuals.map(player => ({...player})));
       
-      // Add shootout losers
+      // Add shootout losers - with deep copies
       if (shootoutLosers.length > 1) {
         // Add as a team
         newQueue.push({
           type: 'PreviousTeam',
           id: uuidv4(),
-          players: shootoutLosers
+          players: shootoutLosers.map(player => ({...player}))
         });
       } else {
-        // Add as individuals
-        newQueue.push(...shootoutLosers);
+        // Add as individuals - with deep copies
+        newQueue.push(...shootoutLosers.map(player => ({...player})));
       }
       
-      // Add remaining items
-      newQueue = [...newQueue, ...queueAfterShootoutTeam];
+      // Add remaining items - with deep copies for players
+      newQueue = [
+        ...newQueue, 
+        ...queueAfterShootoutTeam.map(item => {
+          if (!isPreviousTeam(item)) {
+            return {...item};
+          } else {
+            return {
+              ...item,
+              players: item.players.map(player => ({...player}))
+            };
+          }
+        })
+      ];
+
+      // Check for duplicate IDs in the resulting state
+      const resultState = {
+        ...prev,
+        challengers,
+        waitingQueue: newQueue,
+      };
+      
+      const { hasDuplicates, duplicateIds } = checkForDuplicatePlayers(resultState);
+      if (hasDuplicates) {
+        console.log("[confirmShootout - Step 4] Detected duplicate IDs, fixing:", duplicateIds);
+        // Fix the players with duplicate IDs - regenerate their IDs
+        const fixedChallengers = challengers.map(player => 
+          duplicateIds.includes(player.id) ? clonePlayerWithNewId(player) : player
+        );
+        
+        const fixedQueue = newQueue.map(item => {
+          if (!isPreviousTeam(item)) {
+            return duplicateIds.includes(item.id) ? clonePlayerWithNewId(item) : item;
+          } else {
+            return {
+              ...item,
+              players: item.players.map(player => 
+                duplicateIds.includes(player.id) ? clonePlayerWithNewId(player) : player
+              )
+            };
+          }
+        });
+        
+        // Use fixed versions in the return value below
+        return {
+          ...prev,
+          challengers: fixedChallengers,
+          waitingQueue: fixedQueue,
+          status: 'READY',
+          showShootoutModal: false,
+          shootoutTeam: null,
+          requiredPlayers: 0,
+          selectedShootoutPlayers: []
+        };
+      }
 
       console.log("[confirmShootout - Step 4] Final Waiting Queue:", newQueue);
       console.log("[confirmShootout - Step 4] Setting status to READY");
@@ -748,7 +921,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           // Teams still incomplete, keep manual mode on
           setInfoModalState({
             isOpen: true,
-            message: "Both teams must have exactly five players before turning manual mode off"
+            message: "Both teams must have exactly five players before turning manual mode off."
           });
           return {
             ...prev,

@@ -85,6 +85,16 @@ export const calculateWaitTimeInfo = (
   currentIndex: number,
   elapsedMinutes: number
 ): WaitTimeInfo => {
+  // Safety check - ensure we're within valid bounds
+  if (currentIndex < 0 || currentIndex >= waitingQueue.length) {
+    // Return a default value for invalid indices
+    return {
+      gamesBehind: 1 as GamesBehindCategory,
+      waitMinutes: 12,
+      color: '#4CAF50' // Green
+    };
+  }
+
   // Count total positions ahead
   let positionsAhead = 0;
   

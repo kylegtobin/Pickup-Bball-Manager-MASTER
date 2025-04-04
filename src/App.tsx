@@ -116,7 +116,7 @@ function PickupBasketballApp() {
                 console.log("Champions Won button clicked");
                 handleGameEnd('champions');
               }}
-              className="bg-[#FF6200] hover:bg-orange-700 text-white px-6 py-3 rounded transition-colors duration-200 text-lg relative"
+              className="bg-[#E85A00] text-white px-6 py-3 rounded transition-colors duration-200 text-lg font-bold relative"
             >
               Champions Won
             </button>
@@ -127,7 +127,7 @@ function PickupBasketballApp() {
                 console.log("Challengers Won button clicked");
                 handleGameEnd('challengers');
               }}
-              className="bg-[#1E3A8A] hover:bg-blue-900 text-white px-6 py-3 rounded transition-colors duration-200 text-lg relative"
+              className="bg-[#1E3A8A] hover:bg-blue-900 text-white px-6 py-3 rounded transition-colors duration-200 text-lg font-bold relative"
             >
               Challengers Won
             </button>

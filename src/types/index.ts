@@ -46,4 +46,24 @@ export interface GameState {
       teamId?: string;  // If they were in a Previous Team
     }[];
   };
+  gameStartTime: number | null; // Timestamp when game started
+  elapsedMinutes: number; // Minutes elapsed in the current game (capped at 12)
+}
+
+// New wait time related types
+export type GamesBehindCategory = 
+  | 1
+  | '1-2'
+  | 2
+  | '2-3'
+  | 3
+  | '3-4'
+  | 4 
+  | '4-5'
+  | '5+';
+
+export interface WaitTimeInfo {
+  gamesBehind: GamesBehindCategory;
+  waitMinutes: number;
+  color: string;
 }
