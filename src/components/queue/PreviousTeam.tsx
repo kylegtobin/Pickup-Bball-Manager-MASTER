@@ -247,18 +247,16 @@ const PreviousTeam: React.FC<PreviousTeamProps> = ({
       <h3 className="text-center font-bold mb-2 text-xl">Previous Team</h3>
       <div className="space-y-2">
         {team.players.map((player, playerIndex) => (
-          <div
-            key={player.id}
-            className={`p-3 bg-gray-300 rounded text-center font-bold border-2 border-black text-lg ${
-              manualMode ? 'cursor-move hover:bg-gray-400 transition-colors duration-200' : ''
-            }`}
+          <div 
+            key={`player-${player.id}`}
+            className={`p-3 rounded text-center border-2 border-black bg-gray-300 hover:bg-gray-400 text-lg font-bold`}
             style={{
               height: '42px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              width: '100%',
-              transition: 'border-width 0.15s ease-in-out, border-color 0.15s ease-in-out'
+              cursor: manualMode ? 'move' : 'default',
+              width: '100%'
             }}
             draggable={manualMode}
             onDragStart={(e) => handlePlayerDragStart(e, player, playerIndex)}

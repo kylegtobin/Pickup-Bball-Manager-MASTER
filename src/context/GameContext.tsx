@@ -150,7 +150,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const addPlayer = useCallback((name: string) => {
     const trimmedName = name.trim();
     if (!trimmedName) {
-      showNotification("Player name cannot be empty.", 'error');
+      showNotification("Name cannot be empty.", 'error');
       return;
     }
 
@@ -160,7 +160,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       ...gameState.waitingQueue.flatMap(item => isPreviousTeam(item) ? item.players : [item])
     ];
     if (allPlayers.some(p => p.name.toLowerCase() === trimmedName.toLowerCase())) {
-      throw new Error(`Player "${trimmedName}" already exists.`);
+      throw new Error(`"${trimmedName}" already exists.`);
     }
 
     const newPlayer: Player = {
@@ -389,7 +389,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   // Move player to a new position in the waiting queue or teams
   const movePlayer = useCallback((playerId: string, targetIndex: number) => {
+    console.log(`[movePlayer START] playerId: ${playerId}, targetIndex: ${targetIndex}`); // Log start
     setGameState(prevState => {
+      console.log(`[movePlayer setGameState] Initial waitingQueue:`, JSON.stringify(prevState.waitingQueue.map(item => isPreviousTeam(item) ? `Team(${item.players.map(p => p.name).join(',')})` : item.name))); // Log initial queue state
+
       // First, find and remove the player from their current position
       let playerToMove: Player | null = null;
       let newWaitingQueue = [...prevState.waitingQueue];
@@ -415,60 +418,68 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
       // If not found in teams, check waiting queue
       if (!playerToMove) {
+        let teamRemoved = false; // Flag to track if a team was removed
         for (let i = 0; i < newWaitingQueue.length; i++) {
           const item = newWaitingQueue[i];
           if (isPreviousTeam(item)) {
             const playerIndex = item.players.findIndex(p => p.id === playerId);
             if (playerIndex !== -1) {
               playerToMove = item.players[playerIndex];
+              console.log(`[movePlayer] Found player ${playerToMove.name} in Team ID ${item.id} at queue index ${i}`); // Log found in team
               // Remove player from previous team
-              const newTeam = {
-                ...item,
-                players: item.players.filter(p => p.id !== playerId)
-              };
-              // If team is now empty, remove it entirely
-              if (newTeam.players.length === 0) {
+              const remainingPlayers = item.players.filter(p => p.id !== playerId);
+
+              // If this was the last player, remove the team entirely
+              if (remainingPlayers.length === 0) {
+                console.log(`[movePlayer] Removing Team ID ${item.id} (last player) at queue index ${i}`); // Log team removal
                 newWaitingQueue.splice(i, 1);
-                originalIndex = i; // Remember where the player was
+                originalIndex = i; // Remember where the team *was*
+                teamRemoved = true; // Mark that a team was removed
               } else {
-                newWaitingQueue[i] = newTeam;
+                // Otherwise update the team with remaining players
+                newWaitingQueue[i] = {
+                  ...item,
+                  players: remainingPlayers
+                };
+                console.log(`[movePlayer] Updated Team ID ${item.id} at queue index ${i}`); // Log team update
               }
-              break;
+              break; // Player found and handled
             }
           } else if (item.id === playerId) {
             // Individual player in the queue - save the player and its position
             playerToMove = item;
             originalIndex = i;
+            console.log(`[movePlayer] Removing individual player ${playerToMove.name} at queue index ${i}`); // Log individual removal
             // Remove the player from the waiting queue
             newWaitingQueue.splice(i, 1);
             break;
           }
         }
+        // Log queue state *after* potential removal
+        console.log(`[movePlayer] Queue after removal (if any):`, JSON.stringify(newWaitingQueue.map(item => isPreviousTeam(item) ? `Team(${item.players.map(p => p.name).join(',')})` : item.name)));
+        console.log(`[movePlayer] originalIndex after removal loop: ${originalIndex}, teamRemoved: ${teamRemoved}`); // Log originalIndex
       }
 
       if (!playerToMove) {
-        console.error('Player not found');
+        console.error('[movePlayer] Player not found anywhere.'); // Log not found
         return prevState;
       }
 
-      // If we're trying to move a player to exactly where it already is, just return the state
-      // This prevents duplication when dragging and dropping in the same spot
-      if (originalIndex === targetIndex) {
-        console.log('Moving player to same position, no change needed');
-        // Put the player back in the original position
-        newWaitingQueue.splice(originalIndex, 0, playerToMove);
-        return prevState;
-      }
-
-      // Adjust target index if moving within the same queue
-      // If we're moving from earlier in the queue to later, we need to decrease the target index
-      // because removing the item shifts everything down by one
+      // Adjust target index if an item was removed from the queue *before* the target
+      let adjustedTargetIndex = targetIndex;
       if (originalIndex !== -1 && originalIndex < targetIndex) {
-        targetIndex--;
+          console.log(`[movePlayer] Adjusting targetIndex: ${targetIndex} -> ${targetIndex - 1} because originalIndex ${originalIndex} < targetIndex ${targetIndex}`); // Log adjustment
+          adjustedTargetIndex = targetIndex - 1;
+      } else {
+          console.log(`[movePlayer] No targetIndex adjustment needed. originalIndex: ${originalIndex}, targetIndex: ${targetIndex}`); // Log no adjustment
       }
 
-      // Insert the player at the target position
-      newWaitingQueue.splice(targetIndex, 0, playerToMove);
+      // Insert the player at the *adjusted* target position
+      // Ensure targetIndex is within bounds of the potentially modified queue
+      const finalTargetIndex = Math.max(0, Math.min(adjustedTargetIndex, newWaitingQueue.length));
+      console.log(`[movePlayer] Inserting ${playerToMove.name} at finalTargetIndex: ${finalTargetIndex}`); // Log insertion index
+      newWaitingQueue.splice(finalTargetIndex, 0, playerToMove);
+      console.log(`[movePlayer] Final waitingQueue:`, JSON.stringify(newWaitingQueue.map(item => isPreviousTeam(item) ? `Team(${item.players.map(p => p.name).join(',')})` : item.name))); // Log final queue
 
       return {
         ...prevState,
@@ -946,7 +957,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const handleGameEnd = (winner: 'champions' | 'challengers') => {
     // First check if teams are complete
     if (gameState.champions.length !== 5 || gameState.challengers.length !== 5) {
-      showNotification("Both teams must have 5 players to end the game.", 'error');
+      setErrorMessage("Both teams must have 5 players before starting a new game.");
       console.warn(`[endGame] Attempted to end game with incomplete teams (Champs: ${gameState.champions.length}, Chall: ${gameState.challengers.length}). Aborted.`);
       return;
     }

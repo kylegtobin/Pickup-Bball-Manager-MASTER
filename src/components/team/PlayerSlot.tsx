@@ -40,15 +40,15 @@ const PlayerSlot: React.FC<PlayerSlotProps> = ({
   
   return (
     <div
-      className={`p-3 rounded text-center text-lg ${slotStyle} ${
-        !isEmpty && manualMode ? `cursor-move ${hoverBgColor} transition-colors duration-200` : ''
-      }`}
+      className={`p-3 rounded text-center ${isEmpty ? slotStyle : `border-2 border-black ${bgColor} ${hoverBgColor} ${isDragOver ? 'border-blue-500 border-[6px]' : ''} text-lg font-bold`}`}
       style={{
         height: '42px', 
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        transition: 'border-width 0.15s ease-in-out, border-color 0.15s ease-in-out'
+        transition: 'border-width 0.15s ease-in-out, border-color 0.15s ease-in-out',
+        cursor: !isEmpty && manualMode ? 'move' : 'default',
+        width: '100%'
       }}
       draggable={!isEmpty && manualMode}
       onDragStart={player && onDragStart ? (e) => onDragStart(e, player) : undefined}

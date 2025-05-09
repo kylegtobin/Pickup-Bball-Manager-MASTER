@@ -182,7 +182,7 @@ const WaitingQueue: React.FC = () => {
       {!manualMode && waitingQueue.length > 0 && (
         <div 
           className="text-black font-bold text-xl underline absolute"
-          style={{ top: '120px', left: '65px' }}
+          style={{ top: '120px', left: '59px' }}
         >
           Estimated Wait Time
         </div>
@@ -204,7 +204,7 @@ const WaitingQueue: React.FC = () => {
       {!manualMode && waitingQueue.length > 0 && (
         <div 
           className="text-black font-bold text-xl underline absolute"
-          style={{ top: '120px', right: '77px' }}
+          style={{ top: '120px', right: '75px' }}
         >
           Game Countdown
         </div>
@@ -280,12 +280,15 @@ const WaitingQueue: React.FC = () => {
               </div>
             ) : (
               <div
-                className={`w-full flex items-center text-center p-2 mb-0 border-[2px] border-black rounded bg-gray-300 relative ${
-                  manualMode ? 'cursor-move hover:bg-gray-400 transition-colors duration-200' : ''
-                }`}
+                key={item.id}
+                className={`p-3 rounded text-center border-2 border-black bg-gray-300 hover:bg-gray-400 text-lg font-bold`}
                 style={{
                   height: '42px',
-                  transition: 'all 0.15s ease'
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: manualMode ? 'move' : 'default',
+                  width: '100%'
                 }}
                 draggable={manualMode}
                 onDragStart={manualMode ? (e) => handleDragStart(e, item, index) : undefined}

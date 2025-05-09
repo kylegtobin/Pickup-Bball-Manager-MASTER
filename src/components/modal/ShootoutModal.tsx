@@ -61,7 +61,7 @@ const ShootoutModal: React.FC = () => {
       <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full mx-4 relative border-4 border-gray-900">
         <div className="text-center mb-6">
           <h2 className="text-2xl font-semibold">3-Point Shootout</h2>
-          <p className="mt-2 text-lg">Select {gameState.requiredPlayers} player(s) who won the shootout:</p>
+          <p className="mt-2 text-lg">Select <strong>{gameState.requiredPlayers} player(s)</strong> who won the shootout:</p>
         </div>
         <div className="space-y-2 max-h-[60vh] overflow-y-auto">
           {gameState.shootoutTeam.players.map(player => (
