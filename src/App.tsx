@@ -12,21 +12,81 @@ import PBM2Logo from './assets/images/PBM 2.jpg';
 import ContentModal from './components/modal/ContentModal';
 import Champ1 from './assets/images/Champ 1.jpg';
 import Champ2 from './assets/images/Champ 2.jpg';
+import { createSampleGameState, isSampleLink } from './sample/sampleGame';
+import ScreenSizeNote from './components/ui/ScreenSizeNote';
 import './App.css';
 
-// Wrapper component to provide context
+// Wrapper component to provide context.
+// The real session's provider is always mounted. Sample mode gets its own provider
+// (same rules code, separate in-memory state) and the real one is only hidden,
+// so opening, resetting or exiting a sample can never change a real session.
 function App() {
+  const [sampleOpen, setSampleOpen] = React.useState<boolean>(isSampleLink);
+  const [sampleRun, setSampleRun] = React.useState(0);
+
+  const exitSample = () => {
+    setSampleOpen(false);
+    if (isSampleLink()) {
+      window.history.replaceState(null, '', window.location.pathname + window.location.hash);
+    }
+  };
+
   return (
-    <ToastProvider>
-      <GameProvider>
-        <PickupBasketballApp />
-      </GameProvider>
-    </ToastProvider>
+    <>
+      <ScreenSizeNote />
+      <div hidden={sampleOpen}>
+        <ToastProvider>
+          <GameProvider>
+            <PickupBasketballApp onTrySample={() => setSampleOpen(true)} />
+          </GameProvider>
+        </ToastProvider>
+      </div>
+      {sampleOpen && (
+        <ToastProvider key={sampleRun}>
+          <GameProvider initialState={createSampleGameState()}>
+            <PickupBasketballApp
+              sample={{ onReset: () => setSampleRun(run => run + 1), onExit: exitSample }}
+            />
+          </GameProvider>
+        </ToastProvider>
+      )}
+    </>
   );
 }
 
+function SampleBanner({ onReset, onExit }: { onReset: () => void; onExit: () => void }) {
+  return (
+    <div className="sticky top-0 z-[60] bg-amber-300 border-b-4 border-amber-500 shadow">
+      <div className="max-w-6xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-gray-900 text-base sm:text-lg">
+          <strong>This is a sample.</strong> Made-up players. Nothing here touches a real game.
+        </p>
+        <div className="flex gap-2">
+          <button
+            onClick={onReset}
+            className="bg-white hover:bg-gray-100 text-gray-900 border-2 border-gray-900 px-4 py-2 rounded font-bold"
+          >
+            Reset
+          </button>
+          <button
+            onClick={onExit}
+            className="bg-gray-900 hover:bg-black text-white px-4 py-2 rounded font-bold"
+          >
+            Exit
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface PickupBasketballAppProps {
+  sample?: { onReset: () => void; onExit: () => void };
+  onTrySample?: () => void;
+}
+
 // Inner component with access to context
-function PickupBasketballApp() {
+function PickupBasketballApp({ sample, onTrySample }: PickupBasketballAppProps) {
   const { 
     gameState, 
     addPlayer, 
@@ -40,6 +100,7 @@ function PickupBasketballApp() {
   } = useGame();
   
   const { champions, challengers } = gameState;
+  const isEmpty = champions.length === 0 && challengers.length === 0 && gameState.waitingQueue.length === 0;
   const [newPlayerName, setNewPlayerName] = React.useState('');
   const [removePlayerName, setRemovePlayerName] = React.useState('');
   const [showError, setShowError] = React.useState(false);
@@ -115,7 +176,9 @@ function PickupBasketballApp() {
 
   // Track shootout status for modal
   return (
-    <div className="min-h-screen bg-[#F5F5F5] p-6">
+    <div className="min-h-screen bg-[#F5F5F5]">
+      {sample && <SampleBanner onReset={sample.onReset} onExit={sample.onExit} />}
+      <div className="p-6">
       <div className="container mx-auto px-4 py-4 max-w-6xl">
         {/* Navigation Menu - Moved above the logo */}
         <div className="flex justify-end mb-0">
@@ -469,6 +532,18 @@ function PickupBasketballApp() {
           </div>
         </div>
 
+        {/* Only on the empty start screen, so it never shows during a real night */}
+        {!sample && onTrySample && isEmpty && (
+          <div className="flex justify-center mb-4">
+            <button
+              onClick={onTrySample}
+              className="bg-white hover:bg-amber-50 text-gray-900 border-2 border-[#E85A00] px-5 py-2 rounded-full font-bold transition-colors duration-200"
+            >
+              New here? Try a sample game
+            </button>
+          </div>
+        )}
+
         {/* Teams */}
         <div className="grid grid-cols-2 gap-6 mb-4">
           <TeamBox title="Champions" team={champions} type="champions" />
@@ -501,6 +576,7 @@ function PickupBasketballApp() {
             setErrorMessage(null);
           }}
         />
+      </div>
       </div>
     </div>
   );
