@@ -122,8 +122,10 @@ const defaultGameState: GameState = {
 const GameContext = createContext<GameContextProps | undefined>(undefined);
 
 // GameProvider component
-export function GameProvider({ children }: { children: React.ReactNode }) {
-  const [gameState, setGameState] = useState<GameState>(defaultGameState);
+// initialState lets a separate provider (sample mode) start from a preset lineup.
+// Each provider keeps its own in-memory state, so a sample can never touch a real session.
+export function GameProvider({ children, initialState }: { children: React.ReactNode; initialState?: Partial<GameState> }) {
+  const [gameState, setGameState] = useState<GameState>(() => ({ ...defaultGameState, ...initialState }));
   const { toast } = useToast();
   const [infoModalState, setInfoModalState] = useState<{ isOpen: boolean; message: string }>({
     isOpen: false,
