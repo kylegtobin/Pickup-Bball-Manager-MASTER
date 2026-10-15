@@ -5,19 +5,19 @@ interface EmptySlotProps {
 }
 
 const EmptySlot: React.FC<EmptySlotProps> = ({ teamType = 'queue' }) => {
-  let bgColor = 'bg-gray-300';
+  let bgColor = 'bg-[#F7F8FA]';
   
   if (teamType === 'champions') {
-    bgColor = 'bg-orange-50';
+    bgColor = 'bg-[#F7F8FA]';
   } else if (teamType === 'challengers') {
-    bgColor = 'bg-blue-50';
+    bgColor = 'bg-[#F7F8FA]';
   }
   
   return (
     <div 
-      className={`p-3 rounded text-center border-2 border-black ${bgColor}`}
+      className={`px-3 rounded-md text-center border border-dashed border-[#C9D0D9] ${bgColor}`}
       style={{
-        height: '42px', 
+        height: '46px', 
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
