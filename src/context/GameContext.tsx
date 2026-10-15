@@ -227,6 +227,9 @@ export function GameProvider({ children, initialState }: { children: React.React
     console.log("[removePlayer] Attempting to remove player:", idOrName);
 
     let playerFound = false;
+    // Match by ID, or by name ignoring capitals (sign-in already ignores them)
+    const target = idOrName.trim().toLowerCase();
+    const isTarget = (p: Player) => p.id === idOrName || p.name.toLowerCase() === target;
 
     setGameState(prev => {
       // Calculate total players in the system
@@ -243,7 +246,7 @@ export function GameProvider({ children, initialState }: { children: React.React
       const shouldEnableManualMode = totalPlayers > 10;
 
       // Try to find and remove from champions
-      const championsIndex = prev.champions.findIndex(p => p.id === idOrName || p.name === idOrName);
+      const championsIndex = prev.champions.findIndex(p => isTarget(p));
       if (championsIndex !== -1) {
         console.log("[removePlayer] Found and removing", prev.champions[championsIndex].name, "from Champions");
         playerFound = true;
@@ -268,7 +271,7 @@ export function GameProvider({ children, initialState }: { children: React.React
       }
 
       // Try to find and remove from challengers
-      const challengersIndex = prev.challengers.findIndex(p => p.id === idOrName || p.name === idOrName);
+      const challengersIndex = prev.challengers.findIndex(p => isTarget(p));
       if (challengersIndex !== -1) {
         console.log("[removePlayer] Found and removing", prev.challengers[challengersIndex].name, "from Challengers");
         playerFound = true;
@@ -297,7 +300,7 @@ export function GameProvider({ children, initialState }: { children: React.React
       const newQueue = prev.waitingQueue.reduce<WaitingQueueItem[]>((acc, item) => {
         if (!isPreviousTeam(item)) {
           // Individual player
-          if (item.id !== idOrName && item.name !== idOrName) {
+          if (!isTarget(item)) {
             acc.push(item);
           } else {
             console.log("[removePlayer] Found and removing individual player from queue:", item.name);
@@ -308,7 +311,7 @@ export function GameProvider({ children, initialState }: { children: React.React
           // Previous team - remove player if found, or keep whole team if not
           const teamWithoutPlayer = {
             ...item,
-            players: item.players.filter(p => p.id !== idOrName && p.name !== idOrName)
+            players: item.players.filter(p => !isTarget(p))
           };
           
           if (teamWithoutPlayer.players.length !== item.players.length) {
@@ -339,12 +342,12 @@ export function GameProvider({ children, initialState }: { children: React.React
         setTimeout(() => {
           // Double check if the player exists in any team or queue
           const playerExistsInCurrentState = 
-            gameState.champions.some(p => p.id === idOrName || p.name === idOrName) ||
-            gameState.challengers.some(p => p.id === idOrName || p.name === idOrName) ||
+            gameState.champions.some(p => isTarget(p)) ||
+            gameState.challengers.some(p => isTarget(p)) ||
             gameState.waitingQueue.some(item => 
               !isPreviousTeam(item) 
-                ? (item.id === idOrName || item.name === idOrName)
-                : item.players.some(p => p.id === idOrName || p.name === idOrName)
+                ? (isTarget(item))
+                : item.players.some(p => isTarget(p))
             );
           
           if (!playerExistsInCurrentState) {
