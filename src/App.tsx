@@ -176,18 +176,24 @@ function PickupBasketballApp({ sample, onTrySample }: PickupBasketballAppProps) 
 
   // Track shootout status for modal
   return (
-    <div className="min-h-screen bg-[#F5F5F5]">
+    <div className="min-h-screen bg-[#EDEFF2] text-[#1B2430]">
       {sample && <SampleBanner onReset={sample.onReset} onExit={sample.onExit} />}
-      <div className="p-6">
-      <div className="container mx-auto px-4 py-4 max-w-6xl">
-        {/* Navigation Menu - Moved above the logo */}
-        <div className="flex justify-end mb-0">
+      <div className="px-6 py-4">
+      <div className="container mx-auto px-4 py-2 max-w-6xl">
+        {/* Header: logo left, menu right, one row */}
+        <div className="flex items-center justify-between gap-4 mb-4">
+          <img
+            src={PBM1Logo}
+            alt="Pickup Basketball Manager"
+            className="h-10 xl:h-14 w-auto object-contain"
+            style={{ mixBlendMode: 'multiply' }}
+          />
           <nav>
             <ul className="flex items-center">
               <li>
                 <a 
                   href="#" 
-                  className="text-gray-700 hover:text-blue-600 transition-colors duration-200 font-medium text-base px-4"
+                  className="text-gray-600 hover:text-[#1E3A8A] transition-colors duration-200 font-medium text-sm xl:text-base whitespace-nowrap px-2 xl:px-3"
                   onClick={(e) => {
                     e.preventDefault();
                     openModal("Video Tutorial", (
@@ -212,7 +218,7 @@ function PickupBasketballApp({ sample, onTrySample }: PickupBasketballAppProps) 
               <li>
                 <a 
                   href="#" 
-                  className="text-gray-700 hover:text-blue-600 transition-colors duration-200 font-medium text-base px-4"
+                  className="text-gray-600 hover:text-[#1E3A8A] transition-colors duration-200 font-medium text-sm xl:text-base whitespace-nowrap px-2 xl:px-3"
                   onClick={(e) => {
                     e.preventDefault();
                     openModal("Game Format & Rules", (
@@ -276,7 +282,7 @@ function PickupBasketballApp({ sample, onTrySample }: PickupBasketballAppProps) 
               <li>
                 <a 
                   href="#" 
-                  className="text-gray-700 hover:text-blue-600 transition-colors duration-200 font-medium text-base px-4"
+                  className="text-gray-600 hover:text-[#1E3A8A] transition-colors duration-200 font-medium text-sm xl:text-base whitespace-nowrap px-2 xl:px-3"
                   onClick={(e) => {
                     e.preventDefault();
                     openModal("Site User Guide", (
@@ -331,7 +337,7 @@ function PickupBasketballApp({ sample, onTrySample }: PickupBasketballAppProps) 
               <li>
                 <a 
                   href="#" 
-                  className="text-gray-700 hover:text-blue-600 transition-colors duration-200 font-medium text-base px-4"
+                  className="text-gray-600 hover:text-[#1E3A8A] transition-colors duration-200 font-medium text-sm xl:text-base whitespace-nowrap px-2 xl:px-3"
                   onClick={(e) => {
                     e.preventDefault();
                     openModal("My Story", (
@@ -439,26 +445,10 @@ function PickupBasketballApp({ sample, onTrySample }: PickupBasketballAppProps) 
           </nav>
         </div>
         
-        {/* Logo Header */}
-        <div className="flex justify-center p-0 mb-0">
-          <div className="bg-[#F5F5F5] p-0">
-            <img 
-              src={PBM1Logo} 
-              alt="Pickup Basketball Manager" 
-              className="h-36 object-contain p-0"
-              style={{ 
-                mixBlendMode: 'multiply',
-                maxWidth: '1200px',
-                width: '100%'
-              }}
-            />
-          </div>
-        </div>
-        
         {/* Game Controls */}
-        <div className="flex justify-between items-center mb-5 pt-0">
+        <div className="flex justify-between items-center mb-4">
           <div className="flex items-center gap-2">
-            <span className="text-xl font-semibold">Manual Mode:</span>
+            <span className="text-lg font-semibold">Manual mode</span>
             <Switch
               checked={gameState.manualMode}
               onChange={toggleManualMode}
@@ -475,7 +465,7 @@ function PickupBasketballApp({ sample, onTrySample }: PickupBasketballAppProps) 
                 console.log("Champions Won button clicked");
                 handleGameEnd('champions');
               }}
-              className="bg-[#E85A00] text-white px-6 py-3 rounded transition-colors duration-200 text-lg font-bold relative"
+              className="bg-[#E85A00] hover:bg-[#C94E00] text-white px-6 py-3 rounded-lg transition-colors duration-200 text-lg font-bold relative"
             >
               Champions Won
             </button>
@@ -486,7 +476,7 @@ function PickupBasketballApp({ sample, onTrySample }: PickupBasketballAppProps) 
                 console.log("Challengers Won button clicked");
                 handleGameEnd('challengers');
               }}
-              className="bg-[#1E3A8A] hover:bg-blue-900 text-white px-6 py-3 rounded transition-colors duration-200 text-lg font-bold relative"
+              className="bg-[#1E3A8A] hover:bg-[#172E6E] text-white px-6 py-3 rounded-lg transition-colors duration-200 text-lg font-bold relative"
             >
               Challengers Won
             </button>
@@ -502,11 +492,11 @@ function PickupBasketballApp({ sample, onTrySample }: PickupBasketballAppProps) 
                 onChange={(e) => setNewPlayerName(e.target.value)}
                 onKeyPress={handleKeyPress}
                 placeholder="Enter player name"
-                className="flex-1 p-2 border border-gray-300 rounded-l focus:outline-none focus:ring-1 focus:ring-[#1E3A8A]"
+                className="flex-1 min-w-0 px-3 py-2.5 text-lg bg-white border border-[#D5DAE1] rounded-l-lg focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
               />
               <button
                 onClick={handleAddPlayer}
-                className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-r transition-colors duration-200"
+                className="bg-[#1B2430] hover:bg-black text-white px-5 py-2.5 text-lg font-semibold rounded-r-lg transition-colors duration-200"
               >
                 Add Player
               </button>
@@ -519,12 +509,12 @@ function PickupBasketballApp({ sample, onTrySample }: PickupBasketballAppProps) 
                 value={removePlayerName}
                 onChange={(e) => setRemovePlayerName(e.target.value)}
                 onKeyPress={handleRemoveKeyPress}
-                placeholder="Enter player name"
-                className="flex-1 p-2 border border-gray-300 rounded-l focus:outline-none focus:ring-1 focus:ring-[#1E3A8A]"
+                placeholder="Name to remove"
+                className="flex-1 min-w-0 px-3 py-2.5 text-lg bg-white border border-[#D5DAE1] rounded-l-lg focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
               />
               <button
                 onClick={handleRemovePlayer}
-                className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded transition-colors duration-200"
+                className="bg-white hover:bg-gray-100 text-[#1B2430] border border-l-0 border-[#D5DAE1] px-5 py-2.5 text-lg font-semibold rounded-r-lg transition-colors duration-200"
               >
                 Remove Player
               </button>
