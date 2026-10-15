@@ -172,75 +172,78 @@ const WaitingQueue: React.FC = () => {
     e.stopPropagation();
   };
 
+  const showTimes = !manualMode && gameState.gameStartTime !== null;
+  // Three columns: wait time | the line | games until up. The side columns
+  // shrink with the screen, so nothing gets pushed off the edge on a tablet.
+  const rowGrid = 'grid grid-cols-[minmax(0,1fr)_minmax(0,32rem)_minmax(0,1fr)] gap-4';
+
+  const dropZone = (zoneIndex: number, extraClass = '') => (
+    <div
+      className={`drop-zone border-dashed rounded-md text-center italic font-bold text-lg ${extraClass} ${
+        dragOverIndex === zoneIndex ? 'border-[6px] border-white bg-gray-600 text-white' : 'border-2 border-black bg-gray-600 text-white'
+      }`}
+      style={{
+        height: '46px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: '100%',
+        transition: 'border-width 0.15s ease-in-out, border-color 0.15s ease-in-out'
+      }}
+      onDragOver={(e) => handleDragOver(e, zoneIndex)}
+      onDragLeave={handleDragLeave}
+      onDrop={(e) => handleDrop(e, zoneIndex)}
+    >
+      Drop Zone
+    </div>
+  );
+
   return (
     <div 
-      className="rounded-lg p-4 shadow-sm bg-gray-200 relative"
-      style={{ paddingLeft: '90px', paddingRight: '90px' }}
+      className="rounded-lg px-4 pb-4 pt-2 bg-white border-t-[10px] border-[#64748B]"
       ref={queueRef}
       onContextMenu={handleContainerContextMenu}
     >
-      {!manualMode && waitingQueue.length > 0 && (
-        <div 
-          className="text-black font-bold text-xl underline absolute"
-          style={{ top: '120px', left: '59px' }}
-        >
-          Estimated Wait Time
-        </div>
-      )}
-        
-      <div className="flex justify-center mb-3 mt-1">
+      <div className="flex justify-center mb-2">
         <img 
           src={WaitingQueueLogo} 
           alt="Waiting Queue" 
-          className="h-32 object-contain"
-          style={{ 
-            maxWidth: '280px',
-            width: '100%',
-            mixBlendMode: 'multiply',
-          }}
+          className="h-20 object-contain"
+          style={{ mixBlendMode: 'multiply' }}
         />
       </div>
-        
-      {!manualMode && waitingQueue.length > 0 && (
-        <div 
-          className="text-black font-bold text-xl underline absolute"
-          style={{ top: '120px', right: '75px' }}
-        >
-          Game Countdown
+
+      {showTimes && waitingQueue.length > 0 && (
+        <div className={`${rowGrid} mb-2 text-base font-semibold text-gray-600`}>
+          <div className="text-center">Estimated wait</div>
+          <div />
+          <div className="text-center">Games until up</div>
         </div>
       )}
-      
-      <div className="flex flex-col items-center">
+
+      <div className="flex flex-col">
         {/* Always show first drop zone in manual mode */}
         {manualMode && (
-          <div className="w-full max-w-lg mb-1">
-            <div
-              className={`drop-zone border-dashed rounded text-center italic font-bold text-lg ${
-                dragOverIndex === 0 ? 'border-[6px] border-white bg-gray-600 text-white' : 'border-2 border-black bg-gray-600 text-white'
-              }`}
-              style={{
-                height: '42px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: '100%',
-                transition: 'border-width 0.15s ease-in-out, border-color 0.15s ease-in-out'
-              }}
-              onDragOver={(e) => handleDragOver(e, 0)}
-              onDragLeave={handleDragLeave}
-              onDrop={(e) => handleDrop(e, 0)}
-            >
-              Drop Zone
-            </div>
+          <div className={`${rowGrid} mb-2`}>
+            <div />
+            {dropZone(0)}
+            <div />
           </div>
         )}
         
         {/* Render queue items */}
-        {waitingQueue.map((item, index) => (
-          <div key={isPreviousTeam(item) ? `team-${item.id}` : `player-${item.id}`} className="mb-1 w-full max-w-lg relative">
+        {waitingQueue.map((item, index) => {
+          const waitTimeInfo = showTimes ? calculateWaitTimeInfo(waitingQueue, index, elapsedMinutes) : null;
+          return (
+          <div key={isPreviousTeam(item) ? `team-${item.id}` : `player-${item.id}`} className={`${rowGrid} items-center mb-2`}>
+            <div className="flex justify-center">
+              {waitTimeInfo && <WaitTimeIndicator waitMinutes={waitTimeInfo.waitMinutes} color={waitTimeInfo.color} />}
+            </div>
+
+            <div>
             {isPreviousTeam(item) ? (
               <div 
-                className={`w-full ${dragOverIndex === index ? 'border-[6px]' : 'border-[3px]'} border-gray-700 bg-gray-300 relative rounded`}
+                className={`w-full relative rounded-md ${dragOverIndex === index ? 'ring-4 ring-gray-500' : ''}`}
                 draggable={manualMode}
                 onDragStart={(e) => handleDragStart(e, item, index)}
               >
@@ -255,35 +258,13 @@ const WaitingQueue: React.FC = () => {
                   manualMode={manualMode}
                   isDragOver={dragOverIndex === index}
                 />
-                
-                {/* Wait time and games behind indicators */}
-                {!manualMode && gameState.gameStartTime !== null && (
-                  <>
-                    {/* Only calculate and show if not in manual mode */}
-                    {(() => {
-                      const waitTimeInfo = calculateWaitTimeInfo(waitingQueue, index, elapsedMinutes);
-                      return (
-                        <>
-                          <WaitTimeIndicator 
-                            waitMinutes={waitTimeInfo.waitMinutes} 
-                            color={waitTimeInfo.color} 
-                          />
-                          <GamesBehindIndicator 
-                            gamesBehind={waitTimeInfo.gamesBehind} 
-                            color={waitTimeInfo.color} 
-                          />
-                        </>
-                      );
-                    })()}
-                  </>
-                )}
               </div>
             ) : (
               <div
                 key={item.id}
-                className={`p-3 rounded text-center border-2 border-black bg-gray-300 hover:bg-gray-400 text-lg font-bold`}
+                className="px-3 rounded-md text-center border border-[#D5DAE1] bg-white hover:bg-gray-50 text-xl font-semibold"
                 style={{
-                  height: '42px',
+                  height: '46px',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -295,70 +276,29 @@ const WaitingQueue: React.FC = () => {
                 onDragOver={(e) => handleDragOver(e, index)}
                 onDragLeave={handleDragLeave}
                 onDrop={(e) => handleDrop(e, index)}
-                onContextMenu={(e) => {
-                  if (isPreviousTeam(item)) {
-                    console.error('Invalid player data structure:', item);
-                  } else {
-                    handleContextMenu(e, item);
-                  }
-                }}
+                onContextMenu={(e) => handleContextMenu(e, item)}
               >
-                <div className="flex-grow text-center font-bold">
-                  {item.name}
-                </div>
-                
-                {/* Wait time and games behind indicators */}
-                {!manualMode && gameState.gameStartTime !== null && (
-                  <>
-                    {/* Only calculate and show if not in manual mode */}
-                    {(() => {
-                      const waitTimeInfo = calculateWaitTimeInfo(waitingQueue, index, elapsedMinutes);
-                      return (
-                        <>
-                          <WaitTimeIndicator 
-                            waitMinutes={waitTimeInfo.waitMinutes} 
-                            color={waitTimeInfo.color} 
-                          />
-                          <GamesBehindIndicator 
-                            gamesBehind={waitTimeInfo.gamesBehind} 
-                            color={waitTimeInfo.color} 
-                          />
-                        </>
-                      );
-                    })()}
-                  </>
-                )}
+                {item.name}
               </div>
             )}
-            
+
             {/* Always show drop zone after each item in manual mode */}
-            {manualMode && (
-              <div
-                className={`drop-zone border-dashed rounded text-center italic font-bold text-lg mt-1 ${
-                  dragOverIndex === index + 1 ? 'border-[6px] border-white bg-gray-600 text-white' : 'border-2 border-black bg-gray-600 text-white'
-                }`}
-                style={{
-                  height: '42px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: '100%',
-                  transition: 'border-width 0.15s ease-in-out, border-color 0.15s ease-in-out'
-                }}
-                onDragOver={(e) => handleDragOver(e, index + 1)}
-                onDragLeave={handleDragLeave}
-                onDrop={(e) => handleDrop(e, index + 1)}
-              >
-                Drop Zone
-              </div>
-            )}
+            {manualMode && dropZone(index + 1, 'mt-2')}
+            </div>
+
+            <div className="flex justify-center">
+              {waitTimeInfo && <GamesBehindIndicator gamesBehind={waitTimeInfo.gamesBehind} color={waitTimeInfo.color} />}
+            </div>
           </div>
-        ))}
+          );
+        })}
         
         {/* Show empty slot placeholder when queue is empty, but ONLY if more than 10 players in system */}
         {waitingQueue.length === 0 && totalPlayers > 10 && (
-          <div className="mb-1 w-full max-w-lg">
+          <div className={`${rowGrid} mb-2`}>
+            <div />
             <EmptySlot teamType="queue" />
+            <div />
           </div>
         )}
         

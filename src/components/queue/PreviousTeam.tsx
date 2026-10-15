@@ -231,27 +231,23 @@ const PreviousTeam: React.FC<PreviousTeamProps> = ({
 
   return (
     <div
-      className={`rounded-lg p-4 ${
-        manualMode ? 'cursor-move hover:border-gray-800 transition-colors duration-200' : ''
-      } ${isDragOverState ? 'border-black bg-gray-400 bg-opacity-90' : 'border-black'} w-full transition-all duration-150`}
-      style={{
-        borderWidth: '3px',
-        borderStyle: 'solid'
-      }}
+      className={`rounded-md pl-3 pr-2 pt-2 pb-2 border-l-[6px] border-[#64748B] ${
+        manualMode ? 'cursor-move' : ''
+      } ${isDragOverState ? 'bg-gray-300' : 'bg-[#EEF1F5]'} w-full transition-all duration-150`}
       draggable={manualMode}
       onDragStart={handleTeamDragStart}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleTeamDrop}
     >
-      <h3 className="text-center font-bold mb-2 text-xl">Previous Team</h3>
+      <h3 className="font-semibold mb-2 text-base text-gray-600">Previous team</h3>
       <div className="space-y-2">
         {team.players.map((player, playerIndex) => (
           <div 
             key={`player-${player.id}`}
-            className={`p-3 rounded text-center border-2 border-black bg-gray-300 hover:bg-gray-400 text-lg font-bold`}
+            className="px-3 rounded-md text-center border border-[#D5DAE1] bg-white hover:bg-gray-50 text-xl font-semibold"
             style={{
-              height: '42px',
+              height: '46px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -268,11 +264,11 @@ const PreviousTeam: React.FC<PreviousTeamProps> = ({
         {/* Show drop zone if team is not full AND manual mode is on */}
         {manualMode && team.players.length < 5 && (
           <div
-            className={`p-3 border-dashed rounded text-center italic font-bold text-lg ${
+            className={`px-3 border-dashed rounded-md text-center italic font-bold text-lg ${
               isDragOverDropZone ? 'border-[6px] border-white bg-gray-600 text-white' : 'border-2 border-black bg-gray-600 text-white'
             }`}
             style={{
-              height: '42px',
+              height: '46px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',

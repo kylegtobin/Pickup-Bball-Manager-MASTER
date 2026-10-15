@@ -12,44 +12,19 @@ interface GamesBehindProps {
   color: string;
 }
 
-export const WaitTimeIndicator: React.FC<WaitTimeProps> = ({ waitMinutes, color }) => {
-  return (
-    <div 
-      className="absolute left-0 top-0 h-full flex items-center justify-center"
-      style={{ transform: 'translateX(-280px)' }}
-    >
-      <div 
-        className="border-[2px] border-black rounded bg-gray-300 flex items-center justify-center text-center font-bold"
-        style={{ 
-          backgroundColor: color,
-          width: '220px',
-          height: '32px',
-          transition: 'all 0.15s ease'
-        }}
-      >
-        {formatWaitTime(waitMinutes)}
-      </div>
-    </div>
-  );
-};
+// Pills sit in their own columns beside the line (see WaitingQueue), so they
+// shrink with the screen instead of being pushed off the edge.
+const pillClass =
+  'w-full max-w-[200px] h-9 rounded-full flex items-center justify-center text-center text-lg font-bold text-[#1B2430]';
 
-export const GamesBehindIndicator: React.FC<GamesBehindProps> = ({ gamesBehind, color }) => {
-  return (
-    <div 
-      className="absolute right-0 top-0 h-full flex items-center justify-center"
-      style={{ transform: 'translateX(280px)' }}
-    >
-      <div 
-        className="border-[2px] border-black rounded bg-gray-300 flex items-center justify-center text-center font-bold"
-        style={{ 
-          backgroundColor: color,
-          width: '220px',
-          height: '32px',
-          transition: 'all 0.15s ease'
-        }}
-      >
-        {gamesBehind.toString()}
-      </div>
-    </div>
-  );
-};
+export const WaitTimeIndicator: React.FC<WaitTimeProps> = ({ waitMinutes, color }) => (
+  <div className={pillClass} style={{ backgroundColor: color, transition: 'all 0.15s ease' }}>
+    {formatWaitTime(waitMinutes)}
+  </div>
+);
+
+export const GamesBehindIndicator: React.FC<GamesBehindProps> = ({ gamesBehind, color }) => (
+  <div className={pillClass} style={{ backgroundColor: color, transition: 'all 0.15s ease' }}>
+    {gamesBehind.toString()}
+  </div>
+);
