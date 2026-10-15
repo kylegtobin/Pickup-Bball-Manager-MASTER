@@ -107,28 +107,24 @@ const TeamBox: React.FC<TeamBoxProps> = ({ title, team, type }) => {
 
   return (
     <div 
-      className={`rounded-lg p-4 shadow-sm ${
-        type === 'champions' 
-          ? isDragOver && manualMode ? 'bg-orange-300' : 'bg-orange-200' 
-          : isDragOver && manualMode ? 'bg-blue-300' : 'bg-blue-200'
+      className={`rounded-lg px-4 pb-4 pt-2 border-t-[10px] ${
+        type === 'champions' ? 'border-[#E85A00]' : 'border-[#1E3A8A]'
+      } ${
+        isDragOver && manualMode
+          ? type === 'champions' ? 'bg-orange-50' : 'bg-blue-50'
+          : 'bg-white'
       } transition-colors duration-200`}
       onDragOver={handleBoxDragOver}
       onDragLeave={handleBoxDragLeave}
       onDrop={handleBoxDrop}
     >
-      <div className="flex justify-center mb-3 mt-1">
-        <div style={{ 
-          backgroundColor: type === 'champions' ? 'rgb(254, 215, 170)' : undefined
-        }} className={type === 'challengers' ? 'bg-blue-200' : undefined}>
-          <img 
-            src={type === 'champions' ? Champions3Logo : Challengers3Logo} 
-            alt={type === 'champions' ? 'Champions' : 'Challengers'} 
-            className="h-36 object-contain"
-            style={{ 
-              mixBlendMode: type === 'champions' ? 'darken' : 'multiply'
-            }}
-          />
-        </div>
+      <div className="flex justify-center mb-2">
+        <img 
+          src={type === 'champions' ? Champions3Logo : Challengers3Logo} 
+          alt={type === 'champions' ? 'Champions' : 'Challengers'} 
+          className="h-20 object-contain"
+          style={{ mixBlendMode: 'multiply' }}
+        />
       </div>
       <div className="space-y-2">
         {/* Render actual players */}

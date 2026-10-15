@@ -25,24 +25,18 @@ const PlayerSlot: React.FC<PlayerSlotProps> = ({
   onContextMenu
 }) => {
   const isEmpty = !player;
-  const bgColor = teamType === 'champions' ? 'bg-orange-50' : 'bg-blue-50';
-  const hoverBgColor = teamType === 'champions' ? 'hover:bg-orange-100' : 'hover:bg-blue-100';
+  const hoverBgColor = teamType === 'champions' ? 'hover:bg-orange-50' : 'hover:bg-blue-50';
   
-  // Special styling for empty slots in manual mode vs filled slots
-  const slotStyle = isEmpty
-    ? manualMode
-      // Manual mode empty slot styling - same for both teams
-      ? `border-dashed ${isDragOver ? 'border-[6px] border-white bg-gray-600 text-white' : 'border-2 border-black bg-gray-600 text-white'} italic font-bold`
-      // Non-manual empty slot styling
-      : `border-2 border-black ${bgColor}`
-    // Filled slot styling
-    : `border-2 border-black ${bgColor} font-bold`;
+  // Empty slots: manual mode shows a dark drop zone, otherwise a quiet dashed placeholder
+  const slotStyle = manualMode
+    ? `border-dashed ${isDragOver ? 'border-[6px] border-white bg-gray-600 text-white' : 'border-2 border-black bg-gray-600 text-white'} italic font-bold`
+    : 'border border-dashed border-[#C9D0D9] bg-[#F7F8FA]';
   
   return (
     <div
-      className={`p-3 rounded text-center ${isEmpty ? slotStyle : `border-2 border-black ${bgColor} ${hoverBgColor} ${isDragOver ? 'border-blue-500 border-[6px]' : ''} text-lg font-bold`}`}
+      className={`px-3 rounded-md text-center ${isEmpty ? slotStyle : `border border-[#D5DAE1] bg-white ${hoverBgColor} ${isDragOver ? 'border-blue-500 border-[6px]' : ''} text-xl font-semibold`}`}
       style={{
-        height: '42px', 
+        height: '46px', 
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
