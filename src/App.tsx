@@ -8,13 +8,20 @@ import ErrorModal from './components/modal/ErrorModal';
 import Switch from './components/ui/Switch';
 import { ToastProvider } from './components/ui/Toast';
 import PBM1Logo from './assets/images/PBM 1.jpg';
-import PBM2Logo from './assets/images/PBM 2.jpg';
 import ContentModal from './components/modal/ContentModal';
 import Champ1 from './assets/images/Champ 1.jpg';
 import Champ2 from './assets/images/Champ 2.jpg';
 import { createSampleGameState, isSampleLink } from './sample/sampleGame';
 import ScreenSizeNote from './components/ui/ScreenSizeNote';
+import ResumePrompt from './components/modal/ResumePrompt';
+import ArrangeBar from './components/ArrangeBar';
+import CourtView from './components/CourtView';
+import RecapModal from './components/modal/RecapModal';
+import { useToast } from './components/ui/Toast';
 import './App.css';
+
+// Where the real session is saved on this device. The sample never saves.
+const REAL_SESSION_KEY = 'pbm-session-v1';
 
 // Wrapper component to provide context.
 // The real session's provider is always mounted. Sample mode gets its own provider
@@ -36,7 +43,7 @@ function App() {
       <ScreenSizeNote />
       <div hidden={sampleOpen}>
         <ToastProvider>
-          <GameProvider>
+          <GameProvider persistKey={REAL_SESSION_KEY}>
             <PickupBasketballApp onTrySample={() => setSampleOpen(true)} />
           </GameProvider>
         </ToastProvider>
@@ -96,14 +103,27 @@ function PickupBasketballApp({ sample, onTrySample }: PickupBasketballAppProps) 
     infoModalState,
     dismissInfoModal,
     errorMessage,
-    setErrorMessage
+    setErrorMessage,
+    undo,
+    canUndo,
+    undoLabel
   } = useGame();
+  const { toast } = useToast();
+
+  const handleUndo = () => {
+    if (!canUndo) return;
+    const label = undoLabel;
+    undo();
+    toast(`Undone: ${label}`, 'info');
+  };
   
   const { champions, challengers } = gameState;
   const isEmpty = champions.length === 0 && challengers.length === 0 && gameState.waitingQueue.length === 0;
   const [newPlayerName, setNewPlayerName] = React.useState('');
   const [removePlayerName, setRemovePlayerName] = React.useState('');
   const [showError, setShowError] = React.useState(false);
+  const [courtViewOpen, setCourtViewOpen] = React.useState(false);
+  const [recapOpen, setRecapOpen] = React.useState(false);
   
   // Modal state
   const [activeModal, setActiveModal] = React.useState<{
@@ -185,17 +205,16 @@ function PickupBasketballApp({ sample, onTrySample }: PickupBasketballAppProps) 
           <img
             src={PBM1Logo}
             alt="Pickup Basketball Manager"
-            className="h-10 xl:h-14 w-auto object-contain"
+            className="h-8 xl:h-11 w-auto object-contain"
             style={{ mixBlendMode: 'multiply' }}
           />
           <nav>
             <ul className="flex items-center">
               <li>
-                <a 
-                  href="#" 
-                  className="text-gray-600 hover:text-[#1E3A8A] transition-colors duration-200 font-medium text-sm xl:text-base whitespace-nowrap px-2 xl:px-3"
-                  onClick={(e) => {
-                    e.preventDefault();
+                <button
+                  type="button"
+                  className="text-gray-600 hover:text-[#1E3A8A] transition-colors duration-200 font-medium text-sm whitespace-nowrap px-2 bg-transparent"
+                  onClick={() => {
                     openModal("Video Tutorial", (
                       <div className="flex flex-col items-center">
                         <div className="w-full max-w-3xl aspect-video">
@@ -212,15 +231,14 @@ function PickupBasketballApp({ sample, onTrySample }: PickupBasketballAppProps) 
                   }}
                 >
                   Video Tutorial
-                </a>
+                </button>
               </li>
               <li className="h-5 border-l border-gray-400 mx-1"></li>
               <li>
-                <a 
-                  href="#" 
-                  className="text-gray-600 hover:text-[#1E3A8A] transition-colors duration-200 font-medium text-sm xl:text-base whitespace-nowrap px-2 xl:px-3"
-                  onClick={(e) => {
-                    e.preventDefault();
+                <button
+                  type="button"
+                  className="text-gray-600 hover:text-[#1E3A8A] transition-colors duration-200 font-medium text-sm whitespace-nowrap px-2 bg-transparent"
+                  onClick={() => {
                     openModal("Game Format & Rules", (
                       <div className="text-lg">
                         <h3 className="text-xl font-bold mb-4">Starting a Game</h3>
@@ -276,15 +294,14 @@ function PickupBasketballApp({ sample, onTrySample }: PickupBasketballAppProps) 
                   }}
                 >
                   Game Format & Rules
-                </a>
+                </button>
               </li>
               <li className="h-5 border-l border-gray-400 mx-1"></li>
               <li>
-                <a 
-                  href="#" 
-                  className="text-gray-600 hover:text-[#1E3A8A] transition-colors duration-200 font-medium text-sm xl:text-base whitespace-nowrap px-2 xl:px-3"
-                  onClick={(e) => {
-                    e.preventDefault();
+                <button
+                  type="button"
+                  className="text-gray-600 hover:text-[#1E3A8A] transition-colors duration-200 font-medium text-sm whitespace-nowrap px-2 bg-transparent"
+                  onClick={() => {
                     openModal("Site User Guide", (
                       <div className="text-lg">
                         <h3 className="text-xl font-bold mb-4">📋 Quick Start</h3>
@@ -293,6 +310,15 @@ function PickupBasketballApp({ sample, onTrySample }: PickupBasketballAppProps) 
                           <li>Game results can be recorded once both <strong>Champions</strong> and <strong>Challengers</strong> teams have 5 players each.</li>
                           <li>After a game, click the <strong>Champions Won</strong> or <strong>Challengers Won</strong> buttons at the top of the page.</li>
                           <li>Winners stay, losers queue up, and the next 5 Challengers are filled automatically, with a three-point shootout pop-up appearing when required.</li>
+                          <li>Tapped the wrong button? Click <strong>Undo</strong> to step back one change at a time.</li>
+                        </ul>
+
+                        <hr className="my-6 border-t border-gray-300" />
+
+                        <h3 className="text-xl font-bold mb-4">📺 Court View & Recap</h3>
+                        <ul className="list-disc pl-6 mb-6">
+                          <li><strong>Court View</strong> shows who's playing, the game clock, and who's up next, including any upcoming shootout. Use <strong>Full screen</strong> on a TV or tablet.</li>
+                          <li><strong>Recap</strong> (top menu) shows games played, players tonight, and the longest win streak.</li>
                         </ul>
 
                         <hr className="my-6 border-t border-gray-300" />
@@ -310,19 +336,27 @@ function PickupBasketballApp({ sample, onTrySample }: PickupBasketballAppProps) 
                           <li><strong>Remove Player Options:</strong>
                             <ul className="list-disc pl-6 mt-1">
                               <li>Right-click a player card and select "Remove [Player Name]".</li>
-                              <li>Enter the player's name in the <strong>Enter Player Name</strong> box and click <strong>Remove Player</strong>.</li>
+                              <li>Enter the player's name in the <strong>Name to remove</strong> box and click <strong>Remove Player</strong>.</li>
+                              <li>In Manual Mode, tap the player, then tap <strong>Remove</strong> in the dark bar.</li>
                             </ul>
                           </li>
                           <li><strong>Manual Mode:</strong>
                             <ul className="list-disc pl-6 mt-1">
-                              <li>Toggle the switch <strong>ON</strong> to manually arrange players. Player cards become draggable.</li>
+                              <li>Toggle the switch <strong>ON</strong> to arrange players.</li>
                               <li>Activates automatically if a player is removed from Champions or Challengers.</li>
-                              <li>Drag players to highlighted <strong>drop zones</strong> to move them between Champions, Challengers, or the Waiting Queue.</li>
-                              <li>Reorder players within the Waiting Queue by dragging them to different slots (drop zones).</li>
+                              <li>Drag a player, or tap a player and then tap where they go: an <strong>Open spot</strong> on a team or a <strong>Move here</strong> spot in the line.</li>
+                              <li>Tap a previous team's name to move the whole group.</li>
                               <li>Perfect for special situations: injured players, someone needing to move back in the queue for a phone call, or friends wanting to play together.</li>
-                              <li>Remember to toggle Manual Mode <strong>OFF</strong> when finished arranging.</li>
+                              <li>Tap <strong>Done</strong> when finished arranging.</li>
                             </ul>
                           </li>
+                        </ul>
+
+                        <hr className="my-6 border-t border-gray-300" />
+
+                        <h3 className="text-xl font-bold mb-4">💾 Saved Automatically</h3>
+                        <ul className="list-disc pl-6 mb-6">
+                          <li>The night is saved on this device as you go. After a refresh or a closed tab, choose <strong>Resume session</strong> to pick up where you left off.</li>
                         </ul>
 
                         <p className="text-center font-bold text-xl mt-8 mb-4">Enjoy a seamless, automated, and fair basketball rotation! 🏀</p>
@@ -331,15 +365,14 @@ function PickupBasketballApp({ sample, onTrySample }: PickupBasketballAppProps) 
                   }}
                 >
                   Site User Guide
-                </a>
+                </button>
               </li>
               <li className="h-5 border-l border-gray-400 mx-1"></li>
               <li>
-                <a 
-                  href="#" 
-                  className="text-gray-600 hover:text-[#1E3A8A] transition-colors duration-200 font-medium text-sm xl:text-base whitespace-nowrap px-2 xl:px-3"
-                  onClick={(e) => {
-                    e.preventDefault();
+                <button
+                  type="button"
+                  className="text-gray-600 hover:text-[#1E3A8A] transition-colors duration-200 font-medium text-sm whitespace-nowrap px-2 bg-transparent"
+                  onClick={() => {
                     openModal("My Story", (
                       <div>
                         <h3 className="text-2xl font-bold mb-4">Welcome to Pickup Basketball Manager!</h3>
@@ -439,25 +472,55 @@ function PickupBasketballApp({ sample, onTrySample }: PickupBasketballAppProps) 
                   }}
                 >
                   My Story
-                </a>
+                </button>
+              </li>
+              <li className="h-5 border-l border-gray-400 mx-1"></li>
+              <li>
+                <button
+                  type="button"
+                  className="text-gray-600 hover:text-[#1E3A8A] transition-colors duration-200 font-medium text-sm whitespace-nowrap px-2 bg-transparent"
+                  onClick={() => setRecapOpen(true)}
+                >
+                  Recap
+                </button>
               </li>
             </ul>
           </nav>
         </div>
         
         {/* Game Controls */}
-        <div className="flex justify-between items-center mb-4">
+        <div className="flex flex-wrap justify-between items-center gap-3 mb-4">
           <div className="flex items-center gap-2">
             <span className="text-lg font-semibold">Manual mode</span>
             <Switch
               checked={gameState.manualMode}
               onChange={toggleManualMode}
+              label="Manual mode"
               className={`${
                 gameState.manualMode ? 'bg-blue-600' : 'bg-gray-900'
               } relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none`}
             />
+            <button
+              onClick={() => setCourtViewOpen(true)}
+              className="ml-4 inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-[#D5DAE1] bg-white hover:bg-gray-100 text-base font-semibold"
+              title="Big-screen view of who's playing and who's next"
+            >
+              <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="13" rx="2" /><path d="M8 21h8M12 17v4" /></svg>
+              Court view
+            </button>
           </div>
           <div className="flex gap-4 items-center pointer-events-auto">
+            <button
+              onClick={handleUndo}
+              disabled={!canUndo}
+              title={canUndo ? `Undo: ${undoLabel}` : 'Nothing to undo yet'}
+              className={`flex flex-col items-center justify-center min-w-[7.5rem] h-[52px] px-4 rounded-lg border transition-colors duration-200 ${
+                canUndo ? 'bg-white border-[#D5DAE1] text-[#1B2430] hover:bg-gray-100' : 'bg-transparent border-[#D5DAE1] text-gray-400 cursor-not-allowed'
+              }`}
+            >
+              <span className="text-lg font-bold leading-tight">&#8630; Undo</span>
+              {canUndo && <span className="text-xs leading-tight text-gray-600 max-w-[9rem] truncate">{undoLabel}</span>}
+            </button>
             <button
               onClick={(e) => {
                 e.preventDefault();
@@ -482,6 +545,8 @@ function PickupBasketballApp({ sample, onTrySample }: PickupBasketballAppProps) 
             </button>
           </div>
         </div>
+
+        <ArrangeBar stickyTop={sample ? 'top-[76px]' : 'top-2'} />
 
         <div className="grid grid-cols-2 gap-6 mb-4">
           <div className="mb-0">
@@ -551,6 +616,12 @@ function PickupBasketballApp({ sample, onTrySample }: PickupBasketballAppProps) 
         />
         
         <ShootoutModal />
+
+        <ResumePrompt />
+
+        {recapOpen && <RecapModal onClose={() => setRecapOpen(false)} />}
+
+        {courtViewOpen && <CourtView onClose={() => setCourtViewOpen(false)} isSample={!!sample} />}
         
         <InfoModal
           isOpen={infoModalState.isOpen}

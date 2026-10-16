@@ -2,8 +2,9 @@ import React from 'react';
 import { render, screen } from '@testing-library/react';
 import App from './App';
 
-test('renders learn react link', () => {
+test('opens to an empty session with the sample button', () => {
+  window.localStorage.clear();
   render(<App />);
-  const linkElement = screen.getByText(/learn react/i);
-  expect(linkElement).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'New here? Try a sample game' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Champions Won' })).toBeInTheDocument();
 });
