@@ -218,13 +218,15 @@ function PickupBasketballApp({ sample, onTrySample }: PickupBasketballAppProps) 
                     openModal("Video Tutorial", (
                       <div className="flex flex-col items-center">
                         <div className="w-full max-w-3xl aspect-video">
-                          <iframe 
-                            src="https://www.youtube.com/embed/iQyFAp4Y3jM" 
-                            title="Pickup Basketball App Tutorial"
-                            className="w-full h-full border-0"
-                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-                            allowFullScreen
-                          ></iframe>
+                          <video
+                            src={`${process.env.PUBLIC_URL}/tutorial.mp4`}
+                            poster={`${process.env.PUBLIC_URL}/tutorial-poster.jpg`}
+                            title="How Pickup Basketball Manager works"
+                            className="w-full h-full bg-black rounded-md"
+                            controls
+                            playsInline
+                            preload="none"
+                          />
                         </div>
                       </div>
                     ));
