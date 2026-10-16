@@ -1,11 +1,15 @@
 import React from 'react';
 import { Player } from '../../types';
+import { dropSpotClass, selectedClass } from '../../utils/selection';
 
 interface PlayerSlotProps {
   player?: Player;
   teamType: 'champions' | 'challengers';
   manualMode: boolean;
   isDragOver?: boolean;
+  selected?: boolean; // this player is picked up in manual mode
+  armed?: boolean; // someone is picked up and this open spot can take them
+  onClick?: () => void;
   onDragStart?: (e: React.DragEvent, player: Player) => void;
   onDragOver?: (e: React.DragEvent) => void;
   onDragLeave?: (e: React.DragEvent) => void;
@@ -18,6 +22,9 @@ const PlayerSlot: React.FC<PlayerSlotProps> = ({
   teamType,
   manualMode,
   isDragOver = false,
+  selected = false,
+  armed = false,
+  onClick,
   onDragStart,
   onDragOver,
   onDragLeave,
@@ -26,24 +33,31 @@ const PlayerSlot: React.FC<PlayerSlotProps> = ({
 }) => {
   const isEmpty = !player;
   const hoverBgColor = teamType === 'champions' ? 'hover:bg-orange-50' : 'hover:bg-blue-50';
-  
-  // Empty slots: manual mode shows a dark drop zone, otherwise a quiet dashed placeholder
-  const slotStyle = manualMode
-    ? `border-dashed ${isDragOver ? 'border-[6px] border-white bg-gray-600 text-white' : 'border-2 border-black bg-gray-600 text-white'} italic font-bold`
-    : 'border border-dashed border-[#C9D0D9] bg-[#F7F8FA]';
-  
+
+  let look: string;
+  if (isEmpty) {
+    look = manualMode
+      ? dropSpotClass(isDragOver, armed)
+      : 'border border-dashed border-[#C9D0D9] bg-[#F7F8FA]';
+  } else {
+    look = `border border-[#D5DAE1] text-xl font-semibold ${selected ? selectedClass : `bg-white ${hoverBgColor}`} ${
+      manualMode ? 'cursor-grab active:cursor-grabbing' : ''
+    }`;
+  }
+
   return (
     <div
-      className={`px-3 rounded-md text-center ${isEmpty ? slotStyle : `border border-[#D5DAE1] bg-white ${hoverBgColor} ${isDragOver ? 'border-blue-500 border-[6px]' : ''} text-xl font-semibold`}`}
+      className={`px-3 rounded-md text-center select-none ${look}`}
       style={{
-        height: '46px', 
+        height: '46px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        transition: 'border-width 0.15s ease-in-out, border-color 0.15s ease-in-out',
-        cursor: !isEmpty && manualMode ? 'move' : 'default',
         width: '100%'
       }}
+      role={manualMode ? 'button' : undefined}
+      aria-pressed={manualMode && player ? selected : undefined}
+      onClick={manualMode ? onClick : undefined}
       draggable={!isEmpty && manualMode}
       onDragStart={player && onDragStart ? (e) => onDragStart(e, player) : undefined}
       onDragOver={isEmpty && manualMode && onDragOver ? onDragOver : undefined}
@@ -51,7 +65,7 @@ const PlayerSlot: React.FC<PlayerSlotProps> = ({
       onDrop={isEmpty && manualMode && onDrop ? onDrop : undefined}
       onContextMenu={player && onContextMenu ? (e) => onContextMenu(e, player.id) : undefined}
     >
-      {player ? player.name : (manualMode ? "Drop Zone" : "\u00A0")}
+      {player ? player.name : (manualMode ? 'Open spot' : ' ')}
     </div>
   );
 };

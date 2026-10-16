@@ -4,6 +4,7 @@ import { Player } from '../../types';
 import PlayerSlot from './PlayerSlot';
 import Champions3Logo from '../../assets/images/Champions3.jpg';
 import Challengers3Logo from '../../assets/images/Challengers3.jpg';
+import { findSelection } from '../../utils/selection';
 
 interface TeamBoxProps {
   title: string;
@@ -12,10 +13,21 @@ interface TeamBoxProps {
 }
 
 const TeamBox: React.FC<TeamBoxProps> = ({ title, team, type }) => {
-  const { gameState, removePlayer, addPlayerToTeam } = useGame();
+  const { gameState, removePlayer, addPlayerToTeam, selectedPlayerId, setSelectedPlayerId } = useGame();
   const { manualMode } = gameState;
   const [isDragOver, setIsDragOver] = useState(false);
-  const [dragSlotIndex, setDragSlotIndex] = useState<number | null>(null);
+
+  // Tap to move: a picked-up player can land in any open spot on this team
+  const selection = findSelection(gameState, selectedPlayerId);
+  const canLandHere = selection?.kind === 'player' && selection.where !== type && team.length < 5;
+  const handleOpenSpotTap = () => {
+    if (!canLandHere || selection?.kind !== 'player') return;
+    addPlayerToTeam(selection.player.id, type);
+    setSelectedPlayerId(null);
+  };
+  const handlePlayerTap = (player: Player) => {
+    setSelectedPlayerId(selectedPlayerId === player.id ? null : player.id);
+  };
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; playerId: string; options: { label: string; action: () => void }[] } | null>(null);
 
   const handleRemovePlayer = (player: Player) => {
@@ -30,14 +42,12 @@ const TeamBox: React.FC<TeamBoxProps> = ({ title, team, type }) => {
     e.preventDefault();
     e.stopPropagation();
     setIsDragOver(true);
-    setDragSlotIndex(team.length);
   };
 
   const handleBoxDragLeave = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setIsDragOver(false);
-    setDragSlotIndex(null);
   };
 
   const handleBoxDrop = (e: React.DragEvent) => {
@@ -47,7 +57,6 @@ const TeamBox: React.FC<TeamBoxProps> = ({ title, team, type }) => {
     e.preventDefault();
     e.stopPropagation();
     setIsDragOver(false);
-    setDragSlotIndex(null);
 
     const playerId = e.dataTransfer.getData('playerId');
     const playerType = e.dataTransfer.getData('type');
@@ -118,7 +127,12 @@ const TeamBox: React.FC<TeamBoxProps> = ({ title, team, type }) => {
       onDragLeave={handleBoxDragLeave}
       onDrop={handleBoxDrop}
     >
-      <div className="flex justify-center mb-2">
+      <div className="relative flex justify-center mb-2">
+        {type === 'champions' && gameState.championStreak >= 2 && (
+          <span className="absolute right-0 top-1 whitespace-nowrap rounded-full bg-[#E85A00] text-white px-3 py-1 text-sm font-bold">
+            {gameState.championStreak} straight wins
+          </span>
+        )}
         <img 
           src={type === 'champions' ? Champions3Logo : Challengers3Logo} 
           alt={type === 'champions' ? 'Champions' : 'Challengers'} 
@@ -134,6 +148,8 @@ const TeamBox: React.FC<TeamBoxProps> = ({ title, team, type }) => {
             player={player}
             teamType={type}
             manualMode={manualMode}
+            selected={selectedPlayerId === player.id}
+            onClick={() => handlePlayerTap(player)}
             onDragStart={handlePlayerDragStart}
             onContextMenu={handleContextMenu}
             isDragOver={false}
@@ -150,6 +166,8 @@ const TeamBox: React.FC<TeamBoxProps> = ({ title, team, type }) => {
             teamType={type}
             manualMode={manualMode}
             isDragOver={isDragOver && index === 0}
+            armed={canLandHere}
+            onClick={handleOpenSpotTap}
             onDragOver={handleSlotDragOver}
             onDragLeave={handleBoxDragLeave}
             onDrop={handleSlotDrop}
