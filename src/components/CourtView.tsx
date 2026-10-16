@@ -10,36 +10,86 @@ const formatClock = (ms: number) => {
   return `${m}:${s.toString().padStart(2, '0')}`;
 };
 
-const NameChip: React.FC<{ name: string; tone?: 'plain' | 'shoot' }> = ({ name, tone = 'plain' }) => (
-  <span
-    className={`inline-flex items-center rounded-lg px-3 py-2 text-[clamp(1.25rem,min(2.3vw,4.6vh),3rem)] font-bold leading-none ${
-      tone === 'shoot' ? 'bg-[#F5B301] text-[#14213D]' : 'bg-white/10 text-white'
-    }`}
-  >
-    {name}
-  </span>
+const NAME_SIZE = 'text-[clamp(1.75rem,min(3.4vw,7vh),4.75rem)]';
+
+// Every column shares one header shape (label + a fixed-height detail line) and five equal rows,
+// so names line up across Champions, Challengers and Next up whether or not a streak badge shows.
+const Column: React.FC<{ label: string; accent: string; detail?: React.ReactNode; children: React.ReactNode }> = ({ label, accent, detail, children }) => (
+  <div className="flex-1 min-w-0 flex flex-col rounded-2xl bg-white/[0.06] p-[clamp(1rem,2vw,2rem)]" style={{ boxShadow: `inset 0 6px 0 ${accent}` }}>
+    <h2 className="text-[clamp(1.25rem,2vw,2rem)] font-extrabold leading-tight whitespace-nowrap truncate" style={{ color: accent }}>{label}</h2>
+    <div className="h-[clamp(1.75rem,2.6vw,2.5rem)] flex items-center mb-[clamp(0.25rem,0.8vw,0.75rem)]">{detail}</div>
+    <ol className="flex-1 flex flex-col min-h-0">{children}</ol>
+  </div>
+);
+
+const NameRow: React.FC<{ children: React.ReactNode; muted?: boolean }> = ({ children, muted }) => (
+  <li className={`flex-1 flex items-center min-h-0 ${NAME_SIZE} leading-tight truncate ${muted ? 'font-bold text-white/25' : 'font-extrabold text-white'}`}>{children}</li>
 );
 
 const TeamColumn: React.FC<{ label: string; players: Player[]; accent: string; streak?: number }> = ({ label, players, accent, streak }) => (
-  <div className="flex-1 min-w-0 flex flex-col rounded-2xl bg-white/[0.06] p-[clamp(1rem,2vw,2rem)]" style={{ boxShadow: `inset 0 6px 0 ${accent}` }}>
-    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 mb-[clamp(0.5rem,1.2vw,1.25rem)]">
-      <h2 className="text-[clamp(1.25rem,2vw,2rem)] font-extrabold" style={{ color: accent }}>{label}</h2>
-      {streak !== undefined && streak >= 2 && (
-        <span className="whitespace-nowrap rounded-full bg-[#E85A00] text-white px-3 py-1 text-[clamp(0.9rem,1.3vw,1.25rem)] font-bold">
-          {streak} straight wins
-        </span>
-      )}
-    </div>
-    <ol className="flex-1 flex flex-col justify-evenly">
-      {players.map(p => (
-        <li key={p.id} className="text-[clamp(1.75rem,min(3.7vw,8vh),5rem)] font-extrabold leading-tight text-white truncate">{p.name}</li>
-      ))}
-      {Array.from({ length: Math.max(0, 5 - players.length) }).map((_, i) => (
-        <li key={`open-${i}`} className="text-[clamp(1.75rem,min(3.7vw,8vh),5rem)] font-bold leading-tight text-white/25">Open spot</li>
-      ))}
-    </ol>
-  </div>
+  <Column
+    label={label}
+    accent={accent}
+    detail={streak !== undefined && streak >= 2 ? (
+      <span className="whitespace-nowrap rounded-full bg-[#E85A00] text-white px-3 py-0.5 text-[clamp(0.85rem,1.2vw,1.15rem)] font-bold">{streak} straight wins</span>
+    ) : null}
+  >
+    {players.map(p => <NameRow key={p.id}>{p.name}</NameRow>)}
+    {Array.from({ length: Math.max(0, 5 - players.length) }).map((_, i) => <NameRow key={`open-${i}`} muted>Open spot</NameRow>)}
+  </Column>
 );
+
+// A block that takes the place of the rows it stands for (a 3-spot shootout fills the last 3 rows)
+const SpanBlock: React.FC<{ rows: number; children: React.ReactNode }> = ({ rows, children }) => (
+  <li className="min-h-0 flex py-[clamp(0.25rem,0.6vh,0.5rem)]" style={{ flex: rows }}>
+    <div className="flex-1 rounded-xl border-2 border-[#F5B301]/60 bg-[#F5B301]/[0.07] px-[clamp(0.75rem,1.4vw,1.5rem)] py-[clamp(0.5rem,1.2vh,1.25rem)] flex flex-col justify-center gap-[clamp(0.5rem,1.4vh,1rem)]">
+      {children}
+    </div>
+  </li>
+);
+
+const ShooterChip: React.FC<{ name: string }> = ({ name }) => (
+  <span className="inline-flex items-center rounded-lg bg-[#F5B301] text-[#14213D] px-[clamp(0.5rem,0.9vw,1rem)] py-[clamp(0.25rem,0.7vh,0.55rem)] text-[clamp(1.15rem,min(2vw,4vh),2.4rem)] font-extrabold leading-none">{name}</span>
+);
+
+const NextUpColumn: React.FC<{ gameOn: boolean; lineEmpty: boolean; next: ReturnType<typeof previewNextUp> }> = ({ gameOn, lineEmpty, next }) => {
+  if (!gameOn) {
+    return (
+      <Column label="Next up" accent="#F5B301">
+        <li className="text-[clamp(1.1rem,1.7vw,1.6rem)] text-white/70 pt-2">
+          {lineEmpty ? 'Waiting for 10 players. Sign in on the main screen to get a game going.' : 'Waiting for 10 players. Teams fill as players sign in.'}
+        </li>
+      </Column>
+    );
+  }
+  const spots = next.shootout?.spots ?? 0;
+  return (
+    <Column label="Next up" accent="#F5B301" detail={<span className="text-[clamp(0.9rem,1.2vw,1.2rem)] font-semibold text-white/55">Plays the winner of this game</span>}>
+      {next.picked.map(p => <NameRow key={p.id}>{p.name}</NameRow>)}
+      {next.losersFill === 5 && (
+        <SpanBlock rows={5}>
+          <p className="text-[clamp(1.25rem,min(2vw,4vh),2.25rem)] font-extrabold text-[#F5B301] leading-tight">Same teams run it back</p>
+          <p className="text-[clamp(1.05rem,min(1.6vw,3.2vh),1.6rem)] font-semibold text-white/75">Nobody's waiting in line.</p>
+        </SpanBlock>
+      )}
+      {next.shootout && (
+        <SpanBlock rows={spots}>
+          <p className="text-[clamp(1.25rem,min(2vw,4vh),2.25rem)] font-extrabold text-[#F5B301] leading-tight">
+            Shootout for {spots} {spots === 1 ? 'spot' : 'spots'}
+          </p>
+          {next.shootout.players ? (
+            <div className="flex flex-wrap gap-[clamp(0.35rem,0.6vw,0.6rem)]">
+              {next.shootout.players.map(p => <ShooterChip key={p.id} name={p.name} />)}
+            </div>
+          ) : (
+            <p className="text-[clamp(1.05rem,min(1.6vw,3.2vh),1.6rem)] font-semibold text-white/80">This game's losing team shoots.</p>
+          )}
+        </SpanBlock>
+      )}
+      {Array.from({ length: Math.max(0, 5 - next.picked.length - spots - next.losersFill) }).map((_, i) => <NameRow key={`open-${i}`} muted>Open spot</NameRow>)}
+    </Column>
+  );
+};
 
 // Full-screen view for the court: who's playing, the game clock, and who's next (including a likely shootout).
 const CourtView: React.FC<{ onClose: () => void; isSample?: boolean }> = ({ onClose, isSample }) => {
@@ -100,42 +150,8 @@ const CourtView: React.FC<{ onClose: () => void; isSample?: boolean }> = ({ onCl
           <TeamColumn label="Challengers" players={challengers} accent="#7FA7FF" />
         </div>
 
-        {/* Next up */}
-        <div className="flex-1 min-w-0 rounded-2xl bg-white/[0.06] p-[clamp(1rem,2vw,2rem)]" style={{ boxShadow: 'inset 0 6px 0 #F5B301' }}>
-          <h2 className="text-[clamp(1.25rem,2vw,2rem)] font-extrabold text-white/90 mb-3">
-            {gameOn ? 'Next up' : 'Waiting for 10 players'}
-          </h2>
-          {gameOn ? (
-            <div className="flex flex-col gap-4">
-              {next.picked.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {next.picked.map(p => <NameChip key={p.id} name={p.name} />)}
-                </div>
-              )}
-              {next.losersFill === 5 && (
-                <p className="text-[clamp(1.1rem,1.6vw,1.75rem)] font-bold text-white/80">Nobody's waiting, so the same two teams run it back.</p>
-              )}
-              {next.shootout && (
-                <div className="rounded-xl border-2 border-[#F5B301] bg-[#F5B301]/10 p-4">
-                  <p className="text-[clamp(1.1rem,1.6vw,1.75rem)] font-extrabold text-[#F5B301] mb-3 leading-snug">
-                    {next.picked.length > 0 ? 'Then a' : 'A'} shootout for {next.shootout.spots} {next.shootout.spots === 1 ? 'spot' : 'spots'}
-                  </p>
-                  {next.shootout.players ? (
-                    <div className="flex flex-wrap gap-2">
-                      {next.shootout.players.map(p => <NameChip key={p.id} name={p.name} tone="shoot" />)}
-                    </div>
-                  ) : (
-                    <p className="text-[clamp(1.1rem,1.7vw,1.6rem)] font-semibold text-white/85">This game's losing team shoots for them.</p>
-                  )}
-                </div>
-              )}
-            </div>
-          ) : (
-            <p className="text-[clamp(1.1rem,1.7vw,1.6rem)] text-white/70">
-              {lineEmpty ? 'Sign in on the main screen to get a game going.' : 'Teams fill as players sign in.'}
-            </p>
-          )}
-        </div>
+        {/* Next up: a third lineup card in the same shape as the teams */}
+        <NextUpColumn gameOn={gameOn} lineEmpty={lineEmpty} next={next} />
         </div>
       </div>
     </div>
