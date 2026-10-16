@@ -4,12 +4,16 @@ interface SwitchProps {
   checked: boolean;
   onChange: () => void;
   className?: string;
+  label?: string;
 }
 
-const Switch: React.FC<SwitchProps> = ({ checked, onChange, className = '' }) => {
+const Switch: React.FC<SwitchProps> = ({ checked, onChange, className = '', label }) => {
   return (
     <button
       type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
       onClick={onChange}
       className={`${className} ${
         checked ? 'bg-blue-600' : 'bg-gray-700'
