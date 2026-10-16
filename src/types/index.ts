@@ -1,4 +1,4 @@
-    export interface Player {
+export interface Player {
   id: string;
   name: string;
 }
@@ -48,6 +48,13 @@ export interface GameState {
   };
   gameStartTime: number | null; // Timestamp when game started
   elapsedMinutes: number; // Minutes elapsed in the current game (capped at 12)
+  // Tonight's story, for the win streak badge and the recap
+  championStreak: number; // Wins in a row by the team currently holding Champions
+  gamesPlayed: number;
+  bestStreak: { count: number; names: string[] } | null;
+  sessionStartedAt: number | null; // First sign-in of the night
+  lastResultAt: number | null;
+  playersTonight: string[]; // Everyone who signed in tonight, even if they left
 }
 
 // New wait time related types
