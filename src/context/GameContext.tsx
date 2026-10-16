@@ -1,7 +1,8 @@
-import React, { createContext, useState, useContext, ReactNode, useCallback, useEffect, useRef } from 'react';
+import React, { createContext, useState, useContext, useCallback, useEffect, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { Player, PreviousTeam, WaitingQueueItem, GameState } from '../types'; 
 import { useToast } from '../components/ui/Toast'; 
+import { planChallengers } from '../utils/formChallengers';
 
 // Helper function to check if an item is a PreviousTeam
 export const isPreviousTeam = (item: WaitingQueueItem): item is PreviousTeam => {
@@ -94,6 +95,18 @@ export interface GameContextProps {
   setErrorMessage: React.Dispatch<React.SetStateAction<string | null>>;
   startGameTimer: () => void;
   stopGameTimer: () => void;
+  // Undo: steps back one change at a time (results, sign-ins, removals, moves)
+  undo: () => void;
+  canUndo: boolean;
+  undoLabel: string | null;
+  // Save the night: a saved session found on this device, waiting for Resume or Start fresh
+  pendingResume: { savedAt: number; players: number } | null;
+  resumeSession: () => void;
+  discardSavedSession: () => void;
+  // Manual mode
+  movePlayerIntoGroup: (playerId: string, groupId: string) => void;
+  selectedPlayerId: string | null;
+  setSelectedPlayerId: (id: string | null) => void;
 }
 
 const defaultGameState: GameState = {
@@ -115,7 +128,44 @@ const defaultGameState: GameState = {
     replacements: []
   },
   gameStartTime: null,
-  elapsedMinutes: 0
+  elapsedMinutes: 0,
+  championStreak: 0,
+  gamesPlayed: 0,
+  bestStreak: null,
+  sessionStartedAt: null,
+  lastResultAt: null,
+  playersTonight: []
+};
+
+// PENDING_QUEUE_UPDATE and FORMING_CHALLENGERS only exist for a moment while a result is processed.
+const isStable = (status: GameState['status']) =>
+  status !== 'PENDING_QUEUE_UPDATE' && status !== 'FORMING_CHALLENGERS';
+
+const countPlayers = (s: GameState) =>
+  s.champions.length + s.challengers.length +
+  s.waitingQueue.reduce((n, item) => n + (isPreviousTeam(item) ? item.players.length : 1), 0);
+
+// Who is where. Undo records a step whenever this changes (not on clock ticks or mode switches).
+const rosterSignature = (s: GameState) => JSON.stringify([
+  s.champions.map(p => p.id),
+  s.challengers.map(p => p.id),
+  s.waitingQueue.map(item => (isPreviousTeam(item) ? [item.id, item.players.map(p => p.id)] : item.id)),
+]);
+
+const SAVE_VERSION = 1;
+
+const readSavedSession = (key: string): { savedAt: number; state: GameState } | null => {
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (!data || data.v !== SAVE_VERSION || !data.state) return null;
+    const state: GameState = { ...defaultGameState, ...data.state };
+    if (countPlayers(state) === 0 || !isStable(state.status)) return null;
+    return { savedAt: Number(data.savedAt) || Date.now(), state };
+  } catch {
+    return null;
+  }
 };
 
 // Create the context
@@ -124,21 +174,99 @@ const GameContext = createContext<GameContextProps | undefined>(undefined);
 // GameProvider component
 // initialState lets a separate provider (sample mode) start from a preset lineup.
 // Each provider keeps its own in-memory state, so a sample can never touch a real session.
-export function GameProvider({ children, initialState }: { children: React.ReactNode; initialState?: Partial<GameState> }) {
+// persistKey turns on "save the night" for that provider. Only the real session passes it;
+// the sample never does, so a sample can never write over a saved night.
+export function GameProvider({ children, initialState, persistKey }: { children: React.ReactNode; initialState?: Partial<GameState>; persistKey?: string }) {
   const [gameState, setGameState] = useState<GameState>(() => ({ ...defaultGameState, ...initialState }));
+
+  // ---- Game clock ----
+  const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Recompute minutes from the start time, so the clock stays right after a refresh or an undo.
+  const tickGameTimer = useCallback(() => {
+    setGameState(prev => {
+      if (!prev.gameStartTime) return prev;
+      const minutes = Math.min(12, Math.floor((Date.now() - prev.gameStartTime) / 60000));
+      return minutes === prev.elapsedMinutes ? prev : { ...prev, elapsedMinutes: minutes };
+    });
+  }, []);
+
+  const runGameTimer = useCallback(() => {
+    if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+    timerIntervalRef.current = setInterval(tickGameTimer, 15000);
+  }, [tickGameTimer]);
+
+  const startGameTimer = useCallback(() => {
+    setGameState(prev => ({ ...prev, gameStartTime: Date.now(), elapsedMinutes: 0 }));
+    runGameTimer();
+  }, [runGameTimer]);
+
+  const resumeGameTimer = useCallback(() => {
+    tickGameTimer();
+    runGameTimer();
+  }, [tickGameTimer, runGameTimer]);
+
+  const stopGameTimer = useCallback(() => {
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current);
+      timerIntervalRef.current = null;
+    }
+  }, []);
+
+  // ---- Undo ----
+  const [history, setHistory] = useState<{ state: GameState; label: string }[]>([]);
+  const historyRef = useRef<{ state: GameState; label: string }[]>([]);
+  const lastStableRef = useRef<GameState | null>(null);
+  const lastSignatureRef = useRef<string | null>(null);
+  const restoringRef = useRef(false);
+  const pendingLabelRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!isStable(gameState.status)) return;
+    const sig = rosterSignature(gameState);
+    if (restoringRef.current || lastSignatureRef.current === null) {
+      restoringRef.current = false;
+      pendingLabelRef.current = null;
+    } else if (sig !== lastSignatureRef.current && lastStableRef.current) {
+      const entry = { state: lastStableRef.current, label: pendingLabelRef.current || 'Last change' };
+      historyRef.current = [...historyRef.current.slice(-29), entry];
+      setHistory(historyRef.current);
+      pendingLabelRef.current = null;
+    }
+    lastStableRef.current = gameState;
+    lastSignatureRef.current = sig;
+  }, [gameState]);
+
+  // ---- Save the night (real session only) ----
+  const [savedSession, setSavedSession] = useState<{ savedAt: number; state: GameState } | null>(
+    () => (persistKey ? readSavedSession(persistKey) : null)
+  );
+
+  useEffect(() => {
+    // Never save while a saved night is waiting for Resume or Start fresh, or mid-result.
+    if (!persistKey || savedSession || !isStable(gameState.status)) return;
+    try {
+      if (countPlayers(gameState) === 0) {
+        window.localStorage.removeItem(persistKey);
+      } else {
+        window.localStorage.setItem(persistKey, JSON.stringify({ v: SAVE_VERSION, savedAt: Date.now(), state: gameState }));
+      }
+    } catch {
+      // Storage blocked or full: the night still runs, it just won't survive a refresh.
+    }
+  }, [gameState, persistKey, savedSession]);
+
+  // ---- Manual mode: tap a player, then tap where they go ----
+  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!gameState.manualMode) setSelectedPlayerId(null);
+  }, [gameState.manualMode]);
   const { toast } = useToast();
   const [infoModalState, setInfoModalState] = useState<{ isOpen: boolean; message: string }>({
     isOpen: false,
     message: '',
   });
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  // Track replacements separately from main game state
-  const [replacementTracking, setReplacementTracking] = useState<{
-    replacements: { playerId: string, originalPosition: number, teamId?: string }[];
-  }>({
-    replacements: []
-  });
 
   const showNotification = useCallback((message: string, type: 'info' | 'error' = 'info') => {
     toast(message, type);
@@ -170,8 +298,13 @@ export function GameProvider({ children, initialState }: { children: React.React
       name: trimmedName,
     };
 
+    pendingLabelRef.current = `Added ${trimmedName}`;
     setGameState(prev => {
       const updatedState = { ...prev };
+      updatedState.sessionStartedAt = prev.sessionStartedAt ?? Date.now();
+      updatedState.playersTonight = prev.playersTonight.some(n => n.toLowerCase() === trimmedName.toLowerCase())
+        ? prev.playersTonight
+        : [...prev.playersTonight, trimmedName];
 
       // If we're in INITIAL state and teams aren't full, add directly to teams
       if (prev.status === 'INITIAL' || prev.status === 'WAITING_FOR_PLAYERS') {
@@ -193,25 +326,7 @@ export function GameProvider({ children, initialState }: { children: React.React
           updatedState.elapsedMinutes = 0;
           
           // Start the interval timer in the next tick to avoid potential state conflicts
-          setTimeout(() => {
-            if (timerIntervalRef.current) {
-              clearInterval(timerIntervalRef.current);
-            }
-            timerIntervalRef.current = setInterval(() => {
-              setGameState(prev => {
-                if (!prev.gameStartTime) return prev;
-                
-                // Calculate elapsed minutes, capped at 12
-                const elapsedMs = Date.now() - prev.gameStartTime;
-                const minutes = Math.min(12, Math.floor(elapsedMs / (1000 * 60)));
-                
-                return {
-                  ...prev,
-                  elapsedMinutes: minutes
-                };
-              });
-            }, 60000); // Update every minute
-          }, 0);
+          setTimeout(runGameTimer, 0);
         }
       } else {
         // In any other state, add to waiting queue
@@ -220,7 +335,7 @@ export function GameProvider({ children, initialState }: { children: React.React
 
       return updatedState;
     });
-  }, [gameState, showNotification]);
+  }, [gameState, showNotification, runGameTimer]);
 
   // Remove player from any location (teams or queue)
   const removePlayer = useCallback((idOrName: string) => {
@@ -230,6 +345,13 @@ export function GameProvider({ children, initialState }: { children: React.React
     // Match by ID, or by name ignoring capitals (sign-in already ignores them)
     const target = idOrName.trim().toLowerCase();
     const isTarget = (p: Player) => p.id === idOrName || p.name.toLowerCase() === target;
+    const everyone = [
+      ...gameState.champions,
+      ...gameState.challengers,
+      ...gameState.waitingQueue.flatMap(item => (isPreviousTeam(item) ? item.players : [item])),
+    ];
+    const leaving = everyone.find(isTarget);
+    pendingLabelRef.current = leaving ? `Removed ${leaving.name}` : null;
 
     setGameState(prev => {
       // Calculate total players in the system
@@ -255,7 +377,7 @@ export function GameProvider({ children, initialState }: { children: React.React
         if (shouldEnableManualMode && !prev.manualMode) {
           setInfoModalState({
             isOpen: true,
-            message: "Manual mode enabled. Please drag a player from the waiting queue to the Champions team, then turn off manual mode to continue."
+            message: "A spot opened on Champions. Move someone from the line into it (drag them, or tap them and then tap the open spot), then tap Done."
           });
         }
 
@@ -280,7 +402,7 @@ export function GameProvider({ children, initialState }: { children: React.React
         if (shouldEnableManualMode && !prev.manualMode) {
           setInfoModalState({
             isOpen: true,
-            message: "Manual mode enabled. Please drag a player from the waiting queue to the Challengers team, then turn off manual mode to continue."
+            message: "A spot opened on Challengers. Move someone from the line into it (drag them, or tap them and then tap the open spot), then tap Done."
           });
         }
 
@@ -394,6 +516,7 @@ export function GameProvider({ children, initialState }: { children: React.React
 
   // Move player to a new position in the waiting queue or teams
   const movePlayer = useCallback((playerId: string, targetIndex: number) => {
+    pendingLabelRef.current = 'Move';
     console.log(`[movePlayer START] playerId: ${playerId}, targetIndex: ${targetIndex}`); // Log start
     setGameState(prevState => {
       console.log(`[movePlayer setGameState] Initial waitingQueue:`, JSON.stringify(prevState.waitingQueue.map(item => isPreviousTeam(item) ? `Team(${item.players.map(p => p.name).join(',')})` : item.name))); // Log initial queue state
@@ -497,6 +620,7 @@ export function GameProvider({ children, initialState }: { children: React.React
 
   // Move team to a new position in the waiting queue
   const moveTeam = useCallback((teamId: string, targetIndex: number) => {
+    pendingLabelRef.current = 'Move';
     setGameState(prev => {
       const teamIndex = prev.waitingQueue.findIndex(
         item => isPreviousTeam(item) && item.id === teamId
@@ -509,7 +633,9 @@ export function GameProvider({ children, initialState }: { children: React.React
 
       const newWaitingQueue = [...prev.waitingQueue];
       const [team] = newWaitingQueue.splice(teamIndex, 1);
-      newWaitingQueue.splice(targetIndex, 0, team);
+      // Drop spots are numbered before the team is lifted out, so moving down lands one spot early otherwise
+      const insertAt = teamIndex < targetIndex ? targetIndex - 1 : targetIndex;
+      newWaitingQueue.splice(Math.max(0, Math.min(insertAt, newWaitingQueue.length)), 0, team);
 
       return {
         ...prev,
@@ -520,6 +646,7 @@ export function GameProvider({ children, initialState }: { children: React.React
 
   // Add player to a specific team (champions or challengers)
   const addPlayerToTeam = useCallback((playerId: string, targetTeam: 'champions' | 'challengers') => {
+    pendingLabelRef.current = 'Move';
     setGameState(prev => {
       let playerToMove: Player | null = null;
       let sourceTeam: 'champions' | 'challengers' | null = null;
@@ -614,7 +741,7 @@ export function GameProvider({ children, initialState }: { children: React.React
   }, []);
 
   // Step 1: Process Game End (Initial setup)
-  const processGameEnd = (winningTeam: Player[], losingTeam: Player[]) => {
+  const processGameEnd = (winningTeam: Player[], losingTeam: Player[], winnerSide: 'champions' | 'challengers') => {
     console.log("[processGameEnd - Step 1] Start");
     console.log("[processGameEnd - Step 1] Winners:", winningTeam);
     console.log("[processGameEnd - Step 1] Losers:", losingTeam);
@@ -641,6 +768,12 @@ export function GameProvider({ children, initialState }: { children: React.React
         : null;
 
       console.log("[processGameEnd - Step 1] Setting status to PENDING_QUEUE_UPDATE");
+
+      // Win streak belongs to whoever holds Champions. Challengers winning starts a new one.
+      const streak = winnerSide === 'champions' ? prev.championStreak + 1 : 1;
+      const bestStreak = !prev.bestStreak || streak > prev.bestStreak.count
+        ? { count: streak, names: winningTeam.map(p => p.name) }
+        : prev.bestStreak;
       
       // Store temporary state for the multi-step process
       return {
@@ -652,6 +785,10 @@ export function GameProvider({ children, initialState }: { children: React.React
           replacements: updatedReplacements // Keep only non-winner replacements
         },
         status: 'PENDING_QUEUE_UPDATE',
+        championStreak: streak,
+        gamesPlayed: prev.gamesPlayed + 1,
+        bestStreak,
+        lastResultAt: Date.now(),
         champions: [], // Clear current teams
         challengers: [],
         waitingQueue: [], // Clear queue, will be rebuilt in next step
@@ -733,61 +870,40 @@ export function GameProvider({ children, initialState }: { children: React.React
       return;
     }
 
-    const pendingChallengers: Player[] = [];
-    let remainingQueue = [...gameState.waitingQueue];
+    // Fill the Challengers from the front of the line (rules live in utils/formChallengers.ts)
+    const plan = planChallengers(gameState.waitingQueue);
 
-    // Process queue items until we have enough players or need a shootout
-    while (pendingChallengers.length < 5 && remainingQueue.length > 0) {
-      const item = remainingQueue[0];
-      remainingQueue = remainingQueue.slice(1); // Remove the processed item
-
-      if (!isPreviousTeam(item)) {
-        // Handle individual player - Create a deep copy to prevent reference issues
-        console.log("[useEffect - Step 3] Taking individual player:", item.name);
-        pendingChallengers.push({...item}); // Create a new object to avoid reference issues
-        console.log("[useEffect - Step 3] Challengers in progress:", pendingChallengers.length + "/5");
-      } else {
-        // Handle team
-        console.log("[useEffect - Step 3] Encountered PreviousTeam (size " + item.players.length + ")");
-        const remainingSpots = 5 - pendingChallengers.length;
-
-        if (item.players.length <= remainingSpots) {
-          // Take all players from the team - Create deep copies
-          console.log("[useEffect - Step 3] Taking all " + item.players.length + " players from team" + 
-                     (item.players.length < remainingSpots ? " (not enough to finish)." : "."));
-          pendingChallengers.push(...item.players.map(player => ({...player}))); // Create new objects
-          console.log("[useEffect - Step 3] Challengers in progress:", pendingChallengers.length + "/5");
-        } else {
-          // Need shootout
-          console.log("[useEffect - Step 3] Shootout required. Need " + remainingSpots + " from team of " + item.players.length + ".");
-          
-          setGameState(prev => ({
-            ...prev,
-            challengers: pendingChallengers, // These are the players we've collected before the shootout
-            waitingQueue: [item, ...remainingQueue], // Keep current team and remaining queue
-            shootoutTeam: item,
-            requiredPlayers: remainingSpots,
-            showShootoutModal: true,
-            status: 'SHOOTOUT',
-            selectedShootoutPlayers: [], // Reset selected players
-          }));
-          return; // Exit early
-        }
-      }
+    if (plan.shootout) {
+      const { team, spots } = plan.shootout;
+      console.log("[useEffect - Step 3] Shootout required. Need " + spots + " from team of " + team.players.length + ".");
+      setGameState(prev => ({
+        ...prev,
+        challengers: plan.picked, // These are the players we've collected before the shootout
+        waitingQueue: [team, ...plan.rest], // Keep current team and remaining queue
+        shootoutTeam: team,
+        requiredPlayers: spots,
+        showShootoutModal: true,
+        status: 'SHOOTOUT',
+        selectedShootoutPlayers: [], // Reset selected players
+      }));
+      return;
     }
 
     // If we got here, we have enough players for both teams
     setGameState(prev => ({
       ...prev,
-      challengers: pendingChallengers,
-      waitingQueue: remainingQueue,
+      challengers: plan.picked,
+      waitingQueue: plan.rest,
       status: 'READY',
     }));
+    // Runs only when the status or line changes; reading the rest of gameState here is intentional
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameState.status, gameState.waitingQueue]);
 
   // Step 4: Handle Shootout Confirmation
   const confirmShootout = useCallback((selectedPlayers: Player[]) => {
     console.log("[confirmShootout] Confirming shootout with players:", selectedPlayers);
+    pendingLabelRef.current = 'Shootout picks';
     
     if (selectedPlayers.length !== gameState.requiredPlayers) {
       setErrorMessage(`You must select exactly ${gameState.requiredPlayers} players.`);
@@ -953,10 +1069,6 @@ export function GameProvider({ children, initialState }: { children: React.React
     });
   }, [setInfoModalState]);
 
-  // Direct Setters (primarily for manual mode or testing)
-  const setChampions = (team: Player[]) => setGameState(prev => ({ ...prev, champions: team }));
-  const setChallengers = (team: Player[]) => setGameState(prev => ({ ...prev, challengers: team }));
-  const setWaitingQueue = (queue: WaitingQueueItem[]) => setGameState(prev => ({ ...prev, waitingQueue: queue }));
 
   // Handle game end
   const handleGameEnd = (winner: 'champions' | 'challengers') => {
@@ -969,6 +1081,8 @@ export function GameProvider({ children, initialState }: { children: React.React
 
     // Stop the game timer
     stopGameTimer();
+    const resultLabel = `${winner === 'champions' ? 'Champions' : 'Challengers'} won`;
+    pendingLabelRef.current = resultLabel;
 
     // If we're in WAITING_FOR_MANUAL_REPLACEMENT state but teams are full, 
     // force-reset to READY state before processing the game end
@@ -985,7 +1099,8 @@ export function GameProvider({ children, initialState }: { children: React.React
       setTimeout(() => {
         const winningTeam = winner === 'champions' ? gameState.champions : gameState.challengers;
         const losingTeam = winner === 'champions' ? gameState.challengers : gameState.champions;
-        processGameEnd(winningTeam, losingTeam);
+        pendingLabelRef.current = resultLabel;
+        processGameEnd(winningTeam, losingTeam, winner);
       }, 50);
       return;
     }
@@ -1009,7 +1124,7 @@ export function GameProvider({ children, initialState }: { children: React.React
       elapsedMinutes: 0
     }));
 
-    processGameEnd(winningTeam, losingTeam); // Start the multi-step process
+    processGameEnd(winningTeam, losingTeam, winner); // Start the multi-step process
   };
 
   const dismissShootoutModal = useCallback(() => {
@@ -1017,48 +1132,6 @@ export function GameProvider({ children, initialState }: { children: React.React
       ...prev,
       showShootoutModal: false
     }));
-  }, []);
-
-  const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Timer functionality to track elapsed minutes
-  const startGameTimer = useCallback(() => {
-    // Clear any existing timer
-    if (timerIntervalRef.current) {
-      clearInterval(timerIntervalRef.current);
-    }
-
-    // Set the game start time to now
-    const now = Date.now();
-    setGameState(prev => ({
-      ...prev,
-      gameStartTime: now,
-      elapsedMinutes: 0
-    }));
-
-    // Start a timer that updates elapsed minutes every minute
-    timerIntervalRef.current = setInterval(() => {
-      setGameState(prev => {
-        if (!prev.gameStartTime) return prev;
-        
-        // Calculate elapsed minutes, capped at 12
-        const elapsedMs = Date.now() - prev.gameStartTime;
-        const minutes = Math.min(12, Math.floor(elapsedMs / (1000 * 60)));
-        
-        return {
-          ...prev,
-          elapsedMinutes: minutes
-        };
-      });
-    }, 60000); // Update every minute
-  }, []);
-
-  // Stop the game timer
-  const stopGameTimer = useCallback(() => {
-    if (timerIntervalRef.current) {
-      clearInterval(timerIntervalRef.current);
-      timerIntervalRef.current = null;
-    }
   }, []);
 
   // Clean up timer on unmount
@@ -1081,6 +1154,75 @@ export function GameProvider({ children, initialState }: { children: React.React
     }
   }, [gameState.status, gameState.champions.length, gameState.challengers.length, gameState.gameStartTime, startGameTimer]);
 
+  // Move a player into a group that's waiting in line (drag onto the group, or tap)
+  const movePlayerIntoGroup = useCallback((playerId: string, groupId: string) => {
+    pendingLabelRef.current = 'Move';
+    setGameState(prev => {
+      const group = prev.waitingQueue.find(item => isPreviousTeam(item) && item.id === groupId) as PreviousTeam | undefined;
+      if (!group || group.players.length >= 5 || group.players.some(p => p.id === playerId)) return prev;
+
+      const found: { player: Player | null } = { player: null };
+      const without = (list: Player[]) => list.filter(p => {
+        if (p.id === playerId) { found.player = p; return false; }
+        return true;
+      });
+
+      const champions = without(prev.champions);
+      const challengers = without(prev.challengers);
+      const queue: WaitingQueueItem[] = [];
+      prev.waitingQueue.forEach(item => {
+        if (isPreviousTeam(item)) {
+          if (item.id === groupId) { queue.push(item); return; }
+          const players = without(item.players);
+          if (players.length > 0) queue.push(players.length === item.players.length ? item : { ...item, players });
+        } else if (item.id === playerId) {
+          found.player = item;
+        } else {
+          queue.push(item);
+        }
+      });
+      if (!found.player) return prev;
+      const moved = found.player;
+      return {
+        ...prev,
+        champions,
+        challengers,
+        waitingQueue: queue.map(item =>
+          isPreviousTeam(item) && item.id === groupId ? { ...item, players: [...item.players, moved] } : item
+        ),
+      };
+    });
+  }, []);
+
+  const undo = useCallback(() => {
+    const steps = historyRef.current;
+    if (steps.length === 0) return;
+    const entry = steps[steps.length - 1];
+    historyRef.current = steps.slice(0, -1);
+    setHistory(historyRef.current);
+    restoringRef.current = true;
+    stopGameTimer();
+    setInfoModalState({ isOpen: false, message: '' });
+    setSelectedPlayerId(null);
+    setGameState(entry.state);
+    if (entry.state.gameStartTime) resumeGameTimer();
+  }, [stopGameTimer, resumeGameTimer]);
+
+  const resumeSession = useCallback(() => {
+    if (!savedSession) return;
+    restoringRef.current = true;
+    setGameState(savedSession.state);
+    setSavedSession(null);
+    if (savedSession.state.gameStartTime) resumeGameTimer();
+  }, [savedSession, resumeGameTimer]);
+
+  const discardSavedSession = useCallback(() => {
+    if (persistKey) {
+      try { window.localStorage.removeItem(persistKey); } catch { /* ignore */ }
+    }
+    setSavedSession(null);
+  }, [persistKey]);
+
   const value: GameContextProps = {
     gameState,
     setGameState,
@@ -1099,7 +1241,16 @@ export function GameProvider({ children, initialState }: { children: React.React
     errorMessage,
     setErrorMessage,
     startGameTimer,
-    stopGameTimer
+    stopGameTimer,
+    undo,
+    canUndo: history.length > 0,
+    undoLabel: history.length > 0 ? history[history.length - 1].label : null,
+    pendingResume: savedSession ? { savedAt: savedSession.savedAt, players: countPlayers(savedSession.state) } : null,
+    resumeSession,
+    discardSavedSession,
+    movePlayerIntoGroup,
+    selectedPlayerId,
+    setSelectedPlayerId,
   };
 
   return (
