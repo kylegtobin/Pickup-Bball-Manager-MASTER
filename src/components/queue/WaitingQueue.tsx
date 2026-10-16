@@ -1,15 +1,16 @@
 import React, { useRef, useState } from 'react';
 import { useGame } from '../../context/GameContext';
-import { isPreviousTeam, WaitingQueueItem, Player, PreviousTeam as PreviousTeamType } from '../../types';
+import { isPreviousTeam, WaitingQueueItem, Player } from '../../types';
 import ContextMenu from '../ContextMenu';
 import PreviousTeam from './PreviousTeam';
 import EmptySlot from '../common/EmptySlot';
 import WaitingQueueLogo from '../../assets/images/WaitingQueue.jpg';
 import { calculateWaitTimeInfo } from '../../utils/waitTimeUtils';
 import { WaitTimeIndicator, GamesBehindIndicator } from './WaitTimeIndicators';
+import { findSelection, dropSpotClass, selectedClass } from '../../utils/selection';
 
 const WaitingQueue: React.FC = () => {
-  const { gameState, removePlayer, movePlayer, moveTeam, addPlayerToTeam } = useGame();
+  const { gameState, removePlayer, movePlayer, moveTeam, selectedPlayerId, setSelectedPlayerId } = useGame();
   const { waitingQueue, manualMode, champions, challengers, elapsedMinutes } = gameState;
   const queueRef = useRef<HTMLDivElement>(null);
   const [contextMenu, setContextMenu] = useState<{ position: { x: number; y: number }; options: { label: string; action: () => void }[] } | null>(null);
@@ -54,10 +55,6 @@ const WaitingQueue: React.FC = () => {
     });
   };
 
-  const handleRemovePlayer = (player: Player) => {
-    removePlayer(player.id);
-  };
-
   const handleDragStart = (e: React.DragEvent, item: WaitingQueueItem, index: number) => {
     if (!manualMode) return;
     
@@ -72,24 +69,6 @@ const WaitingQueue: React.FC = () => {
       e.dataTransfer.setData('type', 'player');
     }
     
-    e.dataTransfer.effectAllowed = 'move';
-  };
-
-  const handlePlayerDragStart = (e: React.DragEvent, player: Player) => {
-    if (!manualMode) return;
-    
-    e.dataTransfer.setData('playerId', player.id);
-    e.dataTransfer.setData('type', 'player');
-    e.dataTransfer.setData('source', 'waitingQueue');
-    e.dataTransfer.effectAllowed = 'move';
-  };
-
-  const handleTeamDragStart = (e: React.DragEvent, teamId: string) => {
-    if (!manualMode) return;
-    
-    e.dataTransfer.setData('teamId', teamId);
-    e.dataTransfer.setData('type', 'team');
-    e.dataTransfer.setData('source', 'waitingQueue');
     e.dataTransfer.effectAllowed = 'move';
   };
 
@@ -122,8 +101,6 @@ const WaitingQueue: React.FC = () => {
     setDragOverIndex(null);
     
     const type = e.dataTransfer.getData('type');
-    const source = e.dataTransfer.getData('source');
-    const sourceIndex = parseInt(e.dataTransfer.getData('index'), 10);
 
     if (type === 'player') {
       const playerId = e.dataTransfer.getData('playerId');
@@ -131,16 +108,6 @@ const WaitingQueue: React.FC = () => {
     } else if (type === 'team') {
       const teamId = e.dataTransfer.getData('teamId');
       moveTeam(teamId, index);
-    }
-  };
-
-  const handleDropOnTeam = (e: React.DragEvent, targetTeam: 'champions' | 'challengers') => {
-    if (!manualMode) return;
-    
-    e.preventDefault();
-    const playerId = e.dataTransfer.getData('playerId');
-    if (playerId) {
-      addPlayerToTeam(playerId, targetTeam);
     }
   };
 
@@ -177,24 +144,39 @@ const WaitingQueue: React.FC = () => {
   // shrink with the screen, so nothing gets pushed off the edge on a tablet.
   const rowGrid = 'grid grid-cols-[minmax(0,1fr)_minmax(0,32rem)_minmax(0,1fr)] gap-4';
 
+  // Tap to move: whatever is picked up (a player or a whole group) can land on any spot in the line
+  const selection = findSelection(gameState, selectedPlayerId);
+  const handleSpotTap = (zoneIndex: number) => {
+    if (!selection || isNoOpSpot(zoneIndex)) return;
+    if (selection.kind === 'group') moveTeam(selection.group.id, zoneIndex);
+    else movePlayer(selection.player.id, zoneIndex);
+    setSelectedPlayerId(null);
+  };
+
+  // The spots right above and below the picked-up item wouldn't move it, so they stay quiet
+  const pickedIndex = selection
+    ? waitingQueue.findIndex(item =>
+        selection.kind === 'group' ? item.id === selection.group.id : selection.where === 'line' && item.id === selection.player.id)
+    : -1;
+  const isNoOpSpot = (zoneIndex: number) => pickedIndex !== -1 && (zoneIndex === pickedIndex || zoneIndex === pickedIndex + 1);
+
   const dropZone = (zoneIndex: number, extraClass = '') => (
     <div
-      className={`drop-zone border-dashed rounded-md text-center italic font-bold text-lg ${extraClass} ${
-        dragOverIndex === zoneIndex ? 'border-[6px] border-white bg-gray-600 text-white' : 'border-2 border-black bg-gray-600 text-white'
-      }`}
+      className={`${dropSpotClass(dragOverIndex === zoneIndex, !!selection && !isNoOpSpot(zoneIndex))} ${extraClass}`}
       style={{
-        height: '46px',
+        height: '38px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        width: '100%',
-        transition: 'border-width 0.15s ease-in-out, border-color 0.15s ease-in-out'
+        width: '100%'
       }}
+      role="button"
+      onClick={() => handleSpotTap(zoneIndex)}
       onDragOver={(e) => handleDragOver(e, zoneIndex)}
       onDragLeave={handleDragLeave}
       onDrop={(e) => handleDrop(e, zoneIndex)}
     >
-      Drop Zone
+      {selection && !isNoOpSpot(zoneIndex) ? `Move ${selection.kind === 'group' ? 'group' : selection.player.name} here` : 'Move here'}
     </div>
   );
 
@@ -243,7 +225,7 @@ const WaitingQueue: React.FC = () => {
             <div>
             {isPreviousTeam(item) ? (
               <div 
-                className={`w-full relative rounded-md ${dragOverIndex === index ? 'ring-4 ring-gray-500' : ''}`}
+                className={`w-full relative rounded-md ${dragOverIndex === index ? 'ring-4 ring-[#1E3A8A]/40' : ''}`}
                 draggable={manualMode}
                 onDragStart={(e) => handleDragStart(e, item, index)}
               >
@@ -262,15 +244,19 @@ const WaitingQueue: React.FC = () => {
             ) : (
               <div
                 key={item.id}
-                className="px-3 rounded-md text-center border border-[#D5DAE1] bg-white hover:bg-gray-50 text-xl font-semibold"
+                className={`px-3 rounded-md text-center border border-[#D5DAE1] text-xl font-semibold select-none ${
+                  selectedPlayerId === item.id ? selectedClass : 'bg-white hover:bg-gray-50'
+                } ${manualMode ? 'cursor-grab active:cursor-grabbing' : ''}`}
                 style={{
                   height: '46px',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  cursor: manualMode ? 'move' : 'default',
                   width: '100%'
                 }}
+                role={manualMode ? 'button' : undefined}
+                aria-pressed={manualMode ? selectedPlayerId === item.id : undefined}
+                onClick={manualMode ? () => setSelectedPlayerId(selectedPlayerId === item.id ? null : item.id) : undefined}
                 draggable={manualMode}
                 onDragStart={manualMode ? (e) => handleDragStart(e, item, index) : undefined}
                 onDragOver={(e) => handleDragOver(e, index)}
