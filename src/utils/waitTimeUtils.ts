@@ -1,4 +1,4 @@
-import { WaitingQueueItem, Player, PreviousTeam, GamesBehindCategory, WaitTimeInfo } from '../types';
+import { WaitingQueueItem, GamesBehindCategory, WaitTimeInfo } from '../types';
 import { isPreviousTeam } from '../context/GameContext';
 
 // Color constants for games behind categories
