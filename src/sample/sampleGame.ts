@@ -17,4 +17,6 @@ export const createSampleGameState = (): Partial<GameState> => ({
   challengers: toPlayers(SAMPLE_CHALLENGERS),
   waitingQueue: toPlayers(SAMPLE_WAITING),
   status: 'READY',
+  sessionStartedAt: Date.now(),
+  playersTonight: [...SAMPLE_CHAMPIONS, ...SAMPLE_CHALLENGERS, ...SAMPLE_WAITING],
 });
