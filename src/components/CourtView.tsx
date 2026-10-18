@@ -72,7 +72,7 @@ const NextUpColumn: React.FC<{ gameOn: boolean; lineEmpty: boolean; next: Return
   }
   const spots = next.shootout?.spots ?? 0;
   return (
-    <Column label="Next up" accent="#F5B301" detail={<span className="text-[clamp(0.9rem,1.2vw,1.2rem)] font-semibold text-white/55">Plays the winner of this game</span>}>
+    <Column label="Next up" accent="#F5B301" detail={<span className="text-[clamp(0.9rem,1.2vw,1.2rem)] font-semibold text-white/60">Plays the winner of this game</span>}>
       {next.picked.map(p => <NameRow key={p.id}>{p.name}</NameRow>)}
       {next.losersFill === 5 && (
         <SpanBlock rows={5}>

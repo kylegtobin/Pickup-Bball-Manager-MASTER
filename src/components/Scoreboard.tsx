@@ -122,11 +122,11 @@ const Scoreboard: React.FC<{ stickyTop: string }> = ({ stickyTop }) => {
             <div className={`text-sm font-semibold text-center ${outcome.nextBucket ? 'text-[#F5B301]' : decided ? 'text-white' : 'text-white/60'}`}>{statusText}</div>
             <div className="flex items-center gap-3 text-sm">
               {(state === 'paused' || state === 'not-started' || state === 'time') && (
-                <button type="button" onClick={() => setAdjusting(a => !a)} className="h-9 px-3 rounded-md border border-white/30 text-white/85 font-semibold hover:bg-white/10">
+                <button type="button" onClick={() => setAdjusting(a => !a)} className="h-9 px-3 rounded-md border border-white/30 text-white/80 font-semibold hover:bg-white/10">
                   {adjusting ? 'Done adjusting' : 'Adjust time'}
                 </button>
               )}
-              <button type="button" onClick={() => setFixing(f => !f)} aria-pressed={fixing} className={`h-9 px-3 rounded-md border font-semibold ${fixing ? 'bg-white text-[#0E1A33] border-white' : 'border-white/30 text-white/85 hover:bg-white/10'}`}>
+              <button type="button" onClick={() => setFixing(f => !f)} aria-pressed={fixing} className={`h-9 px-3 rounded-md border font-semibold ${fixing ? 'bg-white text-[#0E1A33] border-white' : 'border-white/30 text-white/80 hover:bg-white/10'}`}>
                 {fixing ? 'Done fixing' : 'Fix score'}
               </button>
               {decided && !showPopup && (
