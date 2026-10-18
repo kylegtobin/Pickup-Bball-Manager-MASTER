@@ -1,4 +1,5 @@
-import { calculateGamesBehindIndividual, calculateGamesBehindTeam, calculateWaitTimeInfo, formatWaitTime } from './waitTimeUtils';
+import { calculateGamesBehindIndividual, calculateGamesBehindTeam, calculateWaitTimeInfo, formatWaitTime, minutesIntoGame } from './waitTimeUtils';
+import { newClock, Clock } from './score';
 import { Player, PreviousTeam } from '../types';
 
 const p = (name: string): Player => ({ id: name, name });
@@ -42,5 +43,39 @@ describe('estimated wait', () => {
   test('an hour or more reads as 1 Hour+', () => {
     expect(formatWaitTime(60)).toBe('1 Hour+');
     expect(formatWaitTime(24)).toBe('24 min');
+  });
+});
+
+describe('waits follow the scoreboard clock when it is in use', () => {
+  const NOW = 1_000_000_000;
+  const line = [p('A'), p('B'), p('C'), p('D'), p('E'), p('F')];
+  const wait = (clock: Clock | undefined, elapsed: number, i = 0) => calculateWaitTimeInfo(line, i, minutesIntoGame(clock, elapsed, NOW)).waitMinutes;
+
+  test('clock not touched: minutes since the game began, like before', () => {
+    expect(wait(newClock(), 3)).toBe(9);
+    expect(wait(undefined, 3)).toBe(9);
+  });
+
+  test('clock set to 10:00 before tip-off: next group waits 10, the group after waits 22', () => {
+    const c = { ...newClock(), remainingMs: 10 * 60_000 };
+    expect(wait(c, 0)).toBe(10);
+    expect(wait(c, 0, 5)).toBe(22);
+  });
+
+  test('running clock with 9:38 left rounds up to 10, whatever the wall clock says', () => {
+    const c = { ...newClock(), remainingMs: 10 * 60_000, runningSince: NOW - 22_000 };
+    expect(wait(c, 0)).toBe(10);
+    expect(wait(c, 7)).toBe(10);
+  });
+
+  test('a paused clock holds the estimate', () => {
+    const c = { ...newClock(), remainingMs: 4 * 60_000 + 30_000 };
+    expect(wait(c, 11)).toBe(5);
+  });
+
+  test('time is up but the game is not recorded yet: about a minute', () => {
+    const c = { ...newClock(), remainingMs: 0, buzzerScore: { champions: 10, challengers: 10 } };
+    expect(wait(c, 12)).toBe(1);
+    expect(wait(c, 12, 5)).toBe(13);
   });
 });

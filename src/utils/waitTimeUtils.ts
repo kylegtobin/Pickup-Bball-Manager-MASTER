@@ -1,5 +1,6 @@
 import { WaitingQueueItem, GamesBehindCategory, WaitTimeInfo } from '../types';
 import { isPreviousTeam } from '../context/GameContext';
+import { Clock, clockState, timeLeft } from './score';
 
 // Color constants for games behind categories
 const COLORS = {
@@ -132,6 +133,19 @@ export const calculateWaitTimeInfo = (
     waitMinutes: adjustedWaitTime,
     color
   };
+};
+
+/**
+ * How far into this game we are, in minutes, for the wait estimate.
+ * Once the scoreboard clock is in use (started, or set before tip-off) it decides:
+ * 10:00 left counts as 2 minutes in, so the next group waits about 10 minutes.
+ * A game at 0:00 that isn't recorded yet counts as 1 minute left.
+ * Without the scoreboard it's the minutes since the game began. Later games are 12 minutes each either way.
+ */
+export const minutesIntoGame = (clock: Clock | undefined, elapsedMinutes: number, now = Date.now()): number => {
+  if (!clock || clockState(clock, now) === 'not-started') return elapsedMinutes;
+  const left = Math.max(1, Math.ceil(timeLeft(clock, now) / 60000));
+  return Math.max(0, BASE_WAIT_TIMES['1'] - left);
 };
 
 /**
