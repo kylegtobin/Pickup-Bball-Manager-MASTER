@@ -1,6 +1,7 @@
 import React from 'react';
 import { Player } from '../../types';
 import { dropSpotClass, selectedClass } from '../../utils/selection';
+import { activateOnKey } from '../../utils/visibility';
 
 interface PlayerSlotProps {
   player?: Player;
@@ -49,7 +50,7 @@ const PlayerSlot: React.FC<PlayerSlotProps> = ({
 
   return (
     <div
-      className={`px-3 rounded-md text-center select-none ${look}`}
+      className={`px-3 rounded-md text-center select-none focus:outline-none focus-visible:ring-4 focus-visible:ring-[#1E3A8A]/50 ${look}`}
       style={{
         height: '46px',
         display: 'flex',
@@ -59,6 +60,8 @@ const PlayerSlot: React.FC<PlayerSlotProps> = ({
       }}
       data-player-id={player?.id}
       role={manualMode ? 'button' : undefined}
+      tabIndex={manualMode ? 0 : undefined}
+      onKeyDown={manualMode ? activateOnKey(onClick) : undefined}
       aria-pressed={manualMode && player ? selected : undefined}
       aria-label={player && swapTarget ? `Swap with ${player.name}` : undefined}
       title={player && swapTarget ? `Swap with ${player.name}` : undefined}
