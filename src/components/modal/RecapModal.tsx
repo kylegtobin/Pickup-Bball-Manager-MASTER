@@ -1,5 +1,5 @@
 import React from 'react';
-import { useGame } from '../../context/GameContext';
+import { useGame, pausedSnapshot } from '../../context/GameContext';
 import { NightSummary } from '../../types';
 import { nightLeaders, joinNames } from '../../utils/nightStats';
 import { drawRecapCard, downloadBlob, downloadBackup, recapFilename } from '../../utils/recapImage';
@@ -24,6 +24,7 @@ const saveImage = async (night: NightSummary) => {
 // Finish night keeps tonight on this device and clears the courts for next time.
 const RecapModal: React.FC<{ onClose: () => void; isSample?: boolean }> = ({ onClose, isSample }) => {
   const { gameState, finishNight, archive, restoreNight, resumeFromBackup } = useGame();
+  const liveBackup = () => ({ state: pausedSnapshot(gameState) });
   const { gamesPlayed, bestStreak, championStreak, playersTonight, sessionStartedAt, lastResultAt, champions, games } = gameState;
   const [view, setView] = React.useState<'tonight' | 'confirm' | 'finished'>('tonight');
   const [finished, setFinished] = React.useState<NightSummary | null>(null);
@@ -187,7 +188,7 @@ const RecapModal: React.FC<{ onClose: () => void; isSample?: boolean }> = ({ onC
             <button className={`${btn} bg-[#1B2430] hover:bg-black text-white disabled:opacity-40 disabled:cursor-not-allowed`} disabled={gamesPlayed === 0} onClick={() => saveImage(tonight)}>
               Download recap image
             </button>
-            <button className={btnLight} disabled={!anythingTonight} onClick={() => downloadBackup(tonight, { state: gameState })}>
+            <button className={btnLight} disabled={!anythingTonight} onClick={() => downloadBackup(tonight, liveBackup())}>
               Download backup
             </button>
             {!isSample && (
@@ -205,7 +206,7 @@ const RecapModal: React.FC<{ onClose: () => void; isSample?: boolean }> = ({ onC
             {finishError && <p role="alert" className="mt-3 font-semibold text-red-700">{finishError}</p>}
             <div className="mt-4 flex flex-wrap gap-3">
               <button className={`${btn} bg-[#E85A00] hover:bg-[#C94E00] text-white`} onClick={doFinish}>{finishError ? 'Try again' : 'Yes, finish night'}</button>
-              {finishError && <button className={btnLight} onClick={() => downloadBackup(tonight, { state: gameState })}>Download backup</button>}
+              {finishError && <button className={btnLight} onClick={() => downloadBackup(tonight, liveBackup())}>Download backup</button>}
               <button className={btnLight} onClick={() => { setFinishError(null); setView('tonight'); }}>Keep playing</button>
             </div>
           </div>

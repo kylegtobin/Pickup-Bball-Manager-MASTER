@@ -16,8 +16,9 @@ const formatSavedAt = (savedAt: number): string => {
 
 // Shown when the real session finds a night saved on this device (after a refresh, a closed tab or a crash).
 const ResumePrompt: React.FC = () => {
-  const { pendingResume, resumeSession, discardSavedSession } = useGame();
+  const { pendingResume, resumeSession, discardSavedSession, downloadSavedBackup } = useGame();
   const [confirmFresh, setConfirmFresh] = React.useState(false);
+  const [couldntSave, setCouldntSave] = React.useState(false);
   const dialogRef = React.useRef<HTMLDivElement>(null);
   useDialogFocus(dialogRef, !!pendingResume);
 
@@ -42,9 +43,17 @@ const ResumePrompt: React.FC = () => {
             Resume session
           </button>
           {pendingResume.games > 0 && <p className="text-sm text-gray-500 -mt-1">Start fresh keeps tonight's games under Past nights in Recap.</p>}
+          {couldntSave && (
+            <div role="alert" className="rounded-lg border-2 border-red-300 bg-red-50 p-3 text-base text-red-900">
+              <p className="font-semibold">This browser wouldn't save tonight's games to Past nights, so nothing was cleared.</p>
+              <button onClick={downloadSavedBackup} className="mt-2 w-full bg-white border border-red-300 text-red-900 font-bold py-2 rounded-lg hover:bg-red-100">
+                Download a backup first
+              </button>
+            </div>
+          )}
           {confirmFresh ? (
             <button
-              onClick={discardSavedSession}
+              onClick={() => { if (!discardSavedSession()) { setCouldntSave(true); setConfirmFresh(false); } }}
               className="w-full bg-red-600 hover:bg-red-700 text-white text-lg font-bold py-3 rounded-lg"
             >
               Tap again to clear it and start fresh

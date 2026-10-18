@@ -1,12 +1,16 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Player } from '../../types';
 import { useGame } from '../../context/GameContext';
+import { useDialogFocus } from '../../utils/useDialogFocus';
 
 const ShootoutModal: React.FC = () => {
   const { gameState, confirmShootout, undo, canUndo } = useGame();
   const [selectedPlayers, setSelectedPlayers] = useState<Player[]>([]);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const required = gameState.requiredPlayers;
+  const dialogRef = useRef<HTMLDivElement>(null);
+  // Keyboard focus stays in the pop-up, so nothing behind it can be changed mid-shootout
+  useDialogFocus(dialogRef, gameState.showShootoutModal && !!gameState.shootoutTeam);
 
   // Reset selected players when shootout team changes
   useEffect(() => {
@@ -50,9 +54,10 @@ const ShootoutModal: React.FC = () => {
   const ready = selectedPlayers.length === required;
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center z-50 p-4">
+    // Above court view too, so a runner using court view can pick winners right there
+    <div className="fixed inset-0 flex items-center justify-center z-[70] p-4">
       <div className="absolute inset-0 bg-black/50"></div>
-      <div role="dialog" aria-labelledby="shootout-title" className="bg-white rounded-xl shadow-xl max-w-md w-full relative border-t-[10px] border-[#F5B301] p-6">
+      <div ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="shootout-title" className="outline-none bg-white rounded-xl shadow-xl max-w-md w-full relative border-t-[10px] border-[#F5B301] p-6">
         <h2 id="shootout-title" className="text-2xl font-bold text-center text-[#1B2430]">3-Point Shootout</h2>
         <p className="mt-2 text-lg text-center">
           Tap the <strong>{required} {required === 1 ? 'player' : 'players'}</strong> who won {required === 1 ? 'the spot' : 'the spots'}.

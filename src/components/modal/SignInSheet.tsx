@@ -41,7 +41,7 @@ const SignInSheet: React.FC<{ onClose: () => void; isSample?: boolean }> = ({ on
       ...gameState.champions,
       ...gameState.challengers,
       ...gameState.waitingQueue.flatMap(item => (isPreviousTeam(item) ? item.players : [item])),
-    ].map(p => (p.rid ?? p.name).toLowerCase())
+    ].filter(p => !p.away).map(p => (p.rid ?? p.name).toLowerCase()) // someone sitting out can tap their name to come back
   );
   const notHere = regulars
     .filter(r => !here.has(r.id.toLowerCase()) && !here.has(r.name.toLowerCase()))
