@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { PreviousTeam as PreviousTeamType, Player } from '../../types';
 import { useGame } from '../../context/GameContext';
+import { activateOnKey } from '../../utils/visibility';
 import { findSelection, dropSpotClass, selectedClass } from '../../utils/selection';
 
 interface PreviousTeamProps {
@@ -167,7 +168,7 @@ const PreviousTeam: React.FC<PreviousTeamProps> = ({
         {team.players.map((player, playerIndex) => (
           <div 
             key={`player-${player.id}`}
-            className={`px-3 rounded-md text-center border border-[#D5DAE1] text-xl font-semibold select-none ${
+            className={`px-3 rounded-md text-center border border-[#D5DAE1] text-xl font-semibold select-none focus:outline-none focus-visible:ring-4 focus-visible:ring-[#1E3A8A]/50 ${
               selectedPlayerId === player.id ? selectedClass : 'bg-white hover:bg-gray-50'
             } ${manualMode ? 'cursor-grab active:cursor-grabbing' : ''}`}
             style={{
@@ -179,19 +180,21 @@ const PreviousTeam: React.FC<PreviousTeamProps> = ({
             }}
             data-player-id={player.id}
             role={manualMode ? 'button' : undefined}
+            tabIndex={manualMode ? 0 : undefined}
+            onKeyDown={manualMode ? (e) => { e.stopPropagation(); activateOnKey(() => toggleSelect(player.id))(e); } : undefined}
             aria-pressed={manualMode ? selectedPlayerId === player.id : undefined}
             onClick={manualMode ? (e) => { e.stopPropagation(); toggleSelect(player.id); } : undefined}
             draggable={manualMode}
             onDragStart={(e) => handlePlayerDragStart(e, player, playerIndex)}
             onContextMenu={(e) => handlePlayerContextMenu(e, player)}
           >
-            {player.name}
+            <span className={player.away ? 'text-gray-400' : ''}>{player.name}</span>{player.away && <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-sm font-semibold text-amber-800">sitting out</span>}
           </div>
         ))}
         {/* Show drop zone if team is not full AND manual mode is on */}
         {manualMode && team.players.length < 5 && (
           <div
-            className={`px-3 ${dropSpotClass(isDragOverDropZone, canJoin)}`}
+            className={`px-3 focus:outline-none focus-visible:ring-4 focus-visible:ring-[#1E3A8A]/50 ${dropSpotClass(isDragOverDropZone, canJoin)}`}
             style={{
               height: '38px',
               display: 'flex',
@@ -200,6 +203,8 @@ const PreviousTeam: React.FC<PreviousTeamProps> = ({
               width: '100%'
             }}
             role="button"
+            tabIndex={0}
+            onKeyDown={(e) => { e.stopPropagation(); activateOnKey(handleJoinTap)(e); }}
             onClick={(e) => { e.stopPropagation(); handleJoinTap(); }}
             onDragOver={handleDropZoneDragOver}
             onDragLeave={handleDropZoneDragLeave}

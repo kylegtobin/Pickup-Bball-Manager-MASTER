@@ -7,6 +7,7 @@ import EmptySlot from '../common/EmptySlot';
 import WaitingQueueLogo from '../../assets/images/WaitingQueue.jpg';
 import { calculateWaitTimeInfo } from '../../utils/waitTimeUtils';
 import { WaitTimeIndicator, GamesBehindIndicator } from './WaitTimeIndicators';
+import { activateOnKey } from '../../utils/visibility';
 import { findSelection, dropSpotClass, selectedClass } from '../../utils/selection';
 
 const WaitingQueue: React.FC = () => {
@@ -160,11 +161,15 @@ const WaitingQueue: React.FC = () => {
     : -1;
   // A player picked up from the court swaps with whoever is tapped in line
   const courtPicked = selection?.kind === 'player' && (selection.where === 'champions' || selection.where === 'challengers');
+  const tapLinePlayer = (id: string) => {
+    if (courtPicked && selection?.kind === 'player') { swapPlayers(selection.player.id, id); setSelectedPlayerId(null); return; }
+    setSelectedPlayerId(selectedPlayerId === id ? null : id);
+  };
   const isNoOpSpot = (zoneIndex: number) => pickedIndex !== -1 && (zoneIndex === pickedIndex || zoneIndex === pickedIndex + 1);
 
   const dropZone = (zoneIndex: number, extraClass = '') => (
     <div
-      className={`${dropSpotClass(dragOverIndex === zoneIndex, !!selection && !isNoOpSpot(zoneIndex))} ${extraClass}`}
+      className={`focus:outline-none focus-visible:ring-4 focus-visible:ring-[#1E3A8A]/50 ${dropSpotClass(dragOverIndex === zoneIndex, !!selection && !isNoOpSpot(zoneIndex))} ${extraClass}`}
       style={{
         height: '38px',
         display: 'flex',
@@ -173,6 +178,8 @@ const WaitingQueue: React.FC = () => {
         width: '100%'
       }}
       role="button"
+      tabIndex={0}
+      onKeyDown={activateOnKey(() => handleSpotTap(zoneIndex))}
       onClick={() => handleSpotTap(zoneIndex)}
       onDragOver={(e) => handleDragOver(e, zoneIndex)}
       onDragLeave={handleDragLeave}
@@ -246,7 +253,7 @@ const WaitingQueue: React.FC = () => {
             ) : (
               <div
                 key={item.id}
-                className={`px-3 rounded-md text-center border border-[#D5DAE1] text-xl font-semibold select-none ${
+                className={`px-3 rounded-md text-center border border-[#D5DAE1] text-xl font-semibold select-none focus:outline-none focus-visible:ring-4 focus-visible:ring-[#1E3A8A]/50 ${
                   selectedPlayerId === item.id ? selectedClass : 'bg-white hover:bg-gray-50'
                 } ${manualMode ? 'cursor-grab active:cursor-grabbing' : ''}`}
                 style={{
@@ -258,12 +265,11 @@ const WaitingQueue: React.FC = () => {
                 }}
                 data-player-id={item.id}
                 role={manualMode ? 'button' : undefined}
+                tabIndex={manualMode ? 0 : undefined}
                 aria-pressed={manualMode ? selectedPlayerId === item.id : undefined}
-                title={manualMode && courtPicked ? `Swap with ${item.name}` : undefined}
-                onClick={manualMode ? () => {
-                  if (courtPicked && selection?.kind === 'player') { swapPlayers(selection.player.id, item.id); setSelectedPlayerId(null); return; }
-                  setSelectedPlayerId(selectedPlayerId === item.id ? null : item.id);
-                } : undefined}
+                title={manualMode && courtPicked && !item.away ? `Swap with ${item.name}` : undefined}
+                onKeyDown={manualMode ? activateOnKey(() => tapLinePlayer(item.id)) : undefined}
+                onClick={manualMode ? () => tapLinePlayer(item.id) : undefined}
                 draggable={manualMode}
                 onDragStart={manualMode ? (e) => handleDragStart(e, item, index) : undefined}
                 onDragOver={(e) => handleDragOver(e, index)}
@@ -271,7 +277,7 @@ const WaitingQueue: React.FC = () => {
                 onDrop={(e) => handleDrop(e, index)}
                 onContextMenu={(e) => handleContextMenu(e, item)}
               >
-                {item.name}
+                <span className={item.away ? 'text-gray-400' : ''}>{item.name}</span>{item.away && <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-sm font-semibold text-amber-800">sitting out</span>}
               </div>
             )}
 
