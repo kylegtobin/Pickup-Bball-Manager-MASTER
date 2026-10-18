@@ -1,0 +1,66 @@
+/* Game Format & Rules and Site User Guide: same look as the court view (Barlow headings, team colors) */
+@font-face { font-family: 'Barlow Condensed'; font-style: normal; font-weight: 700; font-display: swap; src: url(../assets/fonts/barlow-condensed-latin-700-normal.woff2) format('woff2'); }
+@font-face { font-family: 'Barlow Condensed'; font-style: italic; font-weight: 800; font-display: swap; src: url(../assets/fonts/barlow-condensed-latin-800-italic.woff2) format('woff2'); }
+@font-face { font-family: 'Barlow Condensed'; font-style: italic; font-weight: 900; font-display: swap; src: url(../assets/fonts/barlow-condensed-latin-900-italic.woff2) format('woff2'); }
+
+.gd {
+  --orange: #E85A00; --navy: #1E3A8A; --ink: #0F1B2D; --muted: #5B6676; --line: #E3E8EF; --wall: #F3F5F9; --gold: #FFB21A;
+  color: var(--ink); font-size: 16px; line-height: 1.5;
+}
+.gd-display { font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif; font-style: italic; font-weight: 900; letter-spacing: 0.005em; }
+.gd strong { font-weight: 700; }
+.gd .k { display: inline-block; min-width: 1.6em; padding: 0 0.4em; border-radius: 6px; border: 1px solid var(--line); border-bottom-width: 2px; background: #fff; font-size: 0.85em; font-weight: 700; text-align: center; }
+.gd .tag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 0.85em; font-weight: 700; background: var(--wall); border: 1px solid var(--line); white-space: nowrap; }
+
+/* Big numbers strip */
+.gd-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 26px; }
+.gd-stat { background: var(--ink); color: #fff; border-radius: 14px; padding: 14px 10px 12px; text-align: center; box-shadow: inset 0 0 0 3px #22324c; }
+.gd-stat b { display: block; font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif; font-style: italic; font-weight: 900; font-size: 44px; line-height: 1; color: var(--gold); }
+.gd-stat span { display: block; margin-top: 4px; font-size: 13px; font-weight: 600; color: #C9D3E3; }
+
+/* Sections */
+.gd-sec { margin-bottom: 26px; }
+.gd-sec:last-child { margin-bottom: 0; }
+.gd-h { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.gd-h h3 { font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif; font-style: italic; font-weight: 900; font-size: 28px; line-height: 1; margin: 0; }
+.gd-ico { flex: none; width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; color: #fff; background: var(--navy); }
+.gd-ico.o { background: var(--orange); }
+.gd-ico.g { background: var(--gold); color: var(--ink); }
+.gd-ico.d { background: var(--ink); }
+.gd-ico svg { width: 20px; height: 20px; }
+
+/* Numbered steps */
+.gd-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; counter-reset: step; }
+.gd-steps li { counter-increment: step; position: relative; padding: 10px 14px 10px 52px; background: var(--wall); border-radius: 12px; }
+.gd-steps li::before { content: counter(step); position: absolute; left: 12px; top: 50%; transform: translateY(-50%); width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--navy); color: #fff; font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif; font-style: italic; font-weight: 900; font-size: 18px; }
+
+/* Plain list with team-colored ticks */
+.gd-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; }
+.gd-list li { position: relative; padding-left: 20px; }
+.gd-list li::before { content: ''; position: absolute; left: 2px; top: 0.55em; width: 9px; height: 9px; border-radius: 2px; background: var(--orange); transform: rotate(45deg); }
+.gd-list.n li::before { background: var(--navy); }
+.gd-sub { color: var(--muted); font-size: 14px; margin-top: 2px; }
+
+/* Shootout: three outcomes */
+.gd-shoot { border: 2px solid var(--gold); background: #FFF8E6; border-radius: 16px; padding: 16px 18px; }
+.gd-shoot p { margin: 0 0 10px; }
+.gd-out { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 12px 0; }
+.gd-out div { background: #fff; border-radius: 12px; padding: 10px 12px; border: 1px solid #F3DFA8; }
+.gd-out b { display: block; font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif; font-style: italic; font-weight: 900; font-size: 20px; line-height: 1.1; margin-bottom: 2px; }
+
+/* User guide cards */
+.gd-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.gd-card { border: 1px solid var(--line); border-radius: 16px; padding: 16px 18px; background: #fff; box-shadow: 0 6px 18px -14px rgba(15, 27, 45, 0.45); }
+.gd-card.wide { grid-column: 1 / -1; }
+.gd-card .gd-h h3 { font-size: 24px; }
+.gd-card .gd-list { font-size: 15px; }
+.gd-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 28px; }
+
+.gd-foot { margin-top: 26px; text-align: center; font-size: 26px; color: var(--navy); }
+.gd-foot span { color: var(--orange); }
+
+@media (max-width: 760px) {
+  .gd-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .gd-out, .gd-cards, .gd-two { grid-template-columns: 1fr; }
+}
