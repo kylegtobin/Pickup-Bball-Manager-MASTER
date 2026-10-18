@@ -13,7 +13,7 @@ interface TeamBoxProps {
 }
 
 const TeamBox: React.FC<TeamBoxProps> = ({ title, team, type }) => {
-  const { gameState, removePlayer, addPlayerToTeam, selectedPlayerId, setSelectedPlayerId } = useGame();
+  const { gameState, removePlayer, addPlayerToTeam, swapPlayers, selectedPlayerId, setSelectedPlayerId } = useGame();
   const { manualMode } = gameState;
   const [isDragOver, setIsDragOver] = useState(false);
 
@@ -25,7 +25,14 @@ const TeamBox: React.FC<TeamBoxProps> = ({ title, team, type }) => {
     addPlayerToTeam(selection.player.id, type);
     setSelectedPlayerId(null);
   };
+  // With someone from the line or the other team picked up, tapping a player here swaps the two
+  const canSwapHere = selection?.kind === 'player' && selection.where !== type;
   const handlePlayerTap = (player: Player) => {
+    if (canSwapHere && selection?.kind === 'player') {
+      swapPlayers(selection.player.id, player.id);
+      setSelectedPlayerId(null);
+      return;
+    }
     setSelectedPlayerId(selectedPlayerId === player.id ? null : player.id);
   };
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; playerId: string; options: { label: string; action: () => void }[] } | null>(null);
@@ -149,6 +156,7 @@ const TeamBox: React.FC<TeamBoxProps> = ({ title, team, type }) => {
             teamType={type}
             manualMode={manualMode}
             selected={selectedPlayerId === player.id}
+            swapTarget={canSwapHere}
             onClick={() => handlePlayerTap(player)}
             onDragStart={handlePlayerDragStart}
             onContextMenu={handleContextMenu}

@@ -9,6 +9,7 @@ interface PlayerSlotProps {
   isDragOver?: boolean;
   selected?: boolean; // this player is picked up in manual mode
   armed?: boolean; // someone is picked up and this open spot can take them
+  swapTarget?: boolean; // someone is picked up and tapping this player swaps them
   onClick?: () => void;
   onDragStart?: (e: React.DragEvent, player: Player) => void;
   onDragOver?: (e: React.DragEvent) => void;
@@ -24,6 +25,7 @@ const PlayerSlot: React.FC<PlayerSlotProps> = ({
   isDragOver = false,
   selected = false,
   armed = false,
+  swapTarget = false,
   onClick,
   onDragStart,
   onDragOver,
@@ -40,7 +42,7 @@ const PlayerSlot: React.FC<PlayerSlotProps> = ({
       ? dropSpotClass(isDragOver, armed)
       : 'border border-dashed border-[#C9D0D9] bg-[#F7F8FA]';
   } else {
-    look = `border border-[#D5DAE1] text-xl font-semibold ${selected ? selectedClass : `bg-white ${hoverBgColor}`} ${
+    look = `border ${swapTarget ? 'border-dashed border-[#1E3A8A]/50' : 'border-[#D5DAE1]'} text-xl font-semibold ${selected ? selectedClass : `bg-white ${hoverBgColor}`} ${
       manualMode ? 'cursor-grab active:cursor-grabbing' : ''
     }`;
   }
@@ -58,6 +60,8 @@ const PlayerSlot: React.FC<PlayerSlotProps> = ({
       data-player-id={player?.id}
       role={manualMode ? 'button' : undefined}
       aria-pressed={manualMode && player ? selected : undefined}
+      aria-label={player && swapTarget ? `Swap with ${player.name}` : undefined}
+      title={player && swapTarget ? `Swap with ${player.name}` : undefined}
       onClick={manualMode ? onClick : undefined}
       draggable={!isEmpty && manualMode}
       onDragStart={player && onDragStart ? (e) => onDragStart(e, player) : undefined}
