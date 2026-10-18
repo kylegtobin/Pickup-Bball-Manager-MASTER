@@ -1,11 +1,11 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useGame } from '../../context/GameContext';
 import { isPreviousTeam, WaitingQueueItem, Player } from '../../types';
 import ContextMenu from '../ContextMenu';
 import PreviousTeam from './PreviousTeam';
 import EmptySlot from '../common/EmptySlot';
 import WaitingQueueLogo from '../../assets/images/WaitingQueue.jpg';
-import { calculateWaitTimeInfo } from '../../utils/waitTimeUtils';
+import { calculateWaitTimeInfo, minutesIntoGame } from '../../utils/waitTimeUtils';
 import { WaitTimeIndicator, GamesBehindIndicator } from './WaitTimeIndicators';
 import { activateOnKey } from '../../utils/visibility';
 import { findSelection, dropSpotClass, selectedClass } from '../../utils/selection';
@@ -141,6 +141,15 @@ const WaitingQueue: React.FC = () => {
   };
 
   const showTimes = !manualMode && gameState.gameStartTime !== null;
+  // Waits follow the scoreboard clock when it's in use, so refresh them while it runs
+  const [, setTick] = useState(0);
+  const clockRunning = gameState.clock?.runningSince != null;
+  useEffect(() => {
+    if (!clockRunning) return;
+    const id = setInterval(() => setTick(t => t + 1), 5000);
+    return () => clearInterval(id);
+  }, [clockRunning]);
+  const minutesIn = minutesIntoGame(gameState.clock, elapsedMinutes);
   // Three columns: wait time | the line | games until up. The side columns
   // shrink with the screen, so nothing gets pushed off the edge on a tablet.
   const rowGrid = 'grid grid-cols-[minmax(0,1fr)_minmax(0,32rem)_minmax(0,1fr)] gap-4';
@@ -224,7 +233,7 @@ const WaitingQueue: React.FC = () => {
         
         {/* Render queue items */}
         {waitingQueue.map((item, index) => {
-          const waitTimeInfo = showTimes ? calculateWaitTimeInfo(waitingQueue, index, elapsedMinutes) : null;
+          const waitTimeInfo = showTimes ? calculateWaitTimeInfo(waitingQueue, index, minutesIn) : null;
           return (
           <div key={isPreviousTeam(item) ? `team-${item.id}` : `player-${item.id}`} className={`${rowGrid} items-center mb-2`}>
             <div className="flex justify-center">
