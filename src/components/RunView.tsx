@@ -1,5 +1,8 @@
 import React from 'react';
-import { fetchRunView, RunView as View, ViewGame, totalsByName, FetchResult } from '../cloud/runView';
+import { fetchRunView, RunView as View, ViewGame, FetchResult } from '../cloud/runView';
+import { playerLines, nightAwards, gamesFor, PlayerLine } from '../cloud/playerStats';
+import { saveLastRunToken, lastRunToken } from '../cloud/config';
+import CodeEntry from './CodeEntry';
 import { PublicState, PublicPlayer, PublicQueueItem } from '../cloud/publicState';
 import { previewNextUp } from '../utils/formChallengers';
 import { calculateGamesBehindIndividual } from '../utils/waitTimeUtils';
@@ -57,7 +60,7 @@ const Names: React.FC<{ players: PublicPlayer[]; color: string; label: string; s
   </div>
 );
 
-const StatsTable: React.FC<{ rows: { name: string; games: number; wins: number }[]; empty: string }> = ({ rows, empty }) => {
+const StatsTable: React.FC<{ rows: PlayerLine[]; empty: string; onPick: (name: string) => void }> = ({ rows, empty, onPick }) => {
   const [all, setAll] = React.useState(false);
   if (rows.length === 0) return <p className="text-gray-600">{empty}</p>;
   const shown = all ? rows : rows.slice(0, 10);
@@ -67,26 +70,111 @@ const StatsTable: React.FC<{ rows: { name: string; games: number; wins: number }
         <thead>
           <tr className="text-xs uppercase tracking-wide text-gray-500">
             <th className="py-1 font-semibold">Player</th>
-            <th className="py-1 pl-4 font-semibold text-right">Wins</th>
-            <th className="py-1 pl-4 font-semibold text-right">Games</th>
+            <th className="py-1 pl-4 font-semibold text-right">Record</th>
             <th className="py-1 pl-4 font-semibold text-right">Win %</th>
           </tr>
         </thead>
         <tbody>
           {shown.map(r => (
-            <tr key={r.name.toLowerCase()} className="border-t border-gray-100">
-              <td className="py-1.5 font-semibold truncate max-w-0 w-full">{r.name}</td>
-              <td className="py-1.5 pl-4 text-right tabular-nums">{r.wins}</td>
-              <td className="py-1.5 pl-4 text-right tabular-nums">{r.games}</td>
-              <td className="py-1.5 pl-4 text-right tabular-nums text-gray-600">{Math.round((100 * r.wins) / r.games)}%</td>
+            <tr key={r.key} className="border-t border-gray-100">
+              <td className="py-1.5 max-w-0 w-full">
+                <button onClick={() => onPick(r.name)} className="font-semibold text-[#1E3A8A] truncate max-w-full text-left underline decoration-[#1E3A8A]/30 underline-offset-2">{r.name}</button>
+              </td>
+              <td className="py-1.5 pl-4 text-right tabular-nums whitespace-nowrap">{r.wins}–{r.losses}</td>
+              <td className="py-1.5 pl-4 text-right tabular-nums text-gray-600">{r.winPct}%</td>
             </tr>
           ))}
         </tbody>
       </table>
-      {rows.length > 10 && (
-        <button onClick={() => setAll(a => !a)} className="mt-2 text-sm font-bold text-[#1E3A8A]">{all ? 'Show top 10' : `Show all ${rows.length}`}</button>
+      <div className="mt-2 flex justify-between items-center">
+        <span className="text-xs text-gray-500">Tap a name for their stats.</span>
+        {rows.length > 10 && (
+          <button onClick={() => setAll(a => !a)} className="text-sm font-bold text-[#1E3A8A]">{all ? 'Show top 10' : `Show all ${rows.length}`}</button>
+        )}
+      </div>
+    </>
+  );
+};
+
+const Tile: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
+  <div className="rounded-xl bg-[#EDEFF2] px-3 py-2 min-w-0">
+    <p className="text-xs font-semibold text-gray-500">{label}</p>
+    <p className="text-2xl font-black tabular-nums leading-tight truncate">{value}</p>
+  </div>
+);
+const Row: React.FC<{ label: string; value: React.ReactNode; note?: string }> = ({ label, value, note }) => (
+  <div className="flex items-baseline justify-between gap-3 border-t border-gray-100 py-2">
+    <span className="text-gray-700">{label}{note && <span className="block text-xs text-gray-500">{note}</span>}</span>
+    <span className="font-bold tabular-nums text-right">{value}</span>
+  </div>
+);
+
+const PlayerPage: React.FC<{ name: string; all: ViewGame[]; tonight: ViewGame[]; tonightLabel: string; onBack: () => void }> = ({ name, all, tonight, tonightLabel, onBack }) => {
+  const key = name.trim().toLowerCase();
+  const life = playerLines(all).find(l => l.key === key);
+  const night = playerLines(tonight).find(l => l.key === key);
+  const mine = gamesFor(all, name).slice(0, 10);
+  React.useEffect(() => { window.scrollTo(0, 0); }, []);
+  return (
+    <>
+      <button onClick={onBack} className="text-[#1E3A8A] font-bold">‹ Back to the run</button>
+      <h2 className="text-3xl font-black leading-tight">{life?.name ?? name}</h2>
+      {night && (
+        <Card title={tonightLabel}>
+          <div className="grid grid-cols-2 gap-2">
+            <Tile label="Record" value={`${night.wins}–${night.losses}`} />
+            <Tile label="Win %" value={`${night.winPct}%`} />
+            <Tile label="Games" value={night.games} />
+            <Tile label="Best streak" value={night.bestStreak >= 2 ? `${night.bestStreak} straight` : night.bestStreak === 1 ? '1 win' : '—'} />
+          </div>
+        </Card>
+      )}
+      {life ? (
+        <Card title="All runs">
+          <div className="grid grid-cols-2 gap-2 mb-2">
+            <Tile label="Record" value={`${life.wins}–${life.losses}`} />
+            <Tile label="Win %" value={`${life.winPct}%`} />
+            <Tile label="Games" value={life.games} />
+            <Tile label="Days played" value={life.days} />
+          </div>
+          <Row label="Best streak" note="Wins in a row in one night" value={life.bestStreak >= 2 ? `${life.bestStreak} straight` : life.bestStreak} />
+          <Row label="Most wins in a night" value={life.mostWinsInNight} />
+          <Row label="Wins as Challengers" note="Beating the team on the court" value={life.winsAsChallengers} />
+          {life.together && <Row label="Most wins together" value={`${life.together.name} (${life.together.wins})`} />}
+          {life.shootouts > 0 && <Row label="Shootouts" value={`Made it ${life.shootoutsPicked} of ${life.shootouts}`} />}
+          {life.scoredGames > 0 && (
+            <>
+              <Row label="Team points while playing" note={`Per game, from ${life.scoredGames} ${life.scoredGames === 1 ? 'game' : 'games'} with a score`}
+                value={`${(life.pointsFor / life.scoredGames).toFixed(1)} – ${(life.pointsAgainst / life.scoredGames).toFixed(1)}`} />
+              {life.closeWins + life.closeLosses > 0 && <Row label="Close games" note="Decided by 2 or fewer" value={`${life.closeWins}–${life.closeLosses}`} />}
+            </>
+          )}
+        </Card>
+      ) : (
+        <Card><p className="text-gray-600">No games for {name} yet.</p></Card>
+      )}
+      {mine.length > 0 && (
+        <Card title="Recent games">
+          <ol>{mine.map(g => <GameRow key={g.id} g={g} />)}</ol>
+        </Card>
       )}
     </>
+  );
+};
+
+const Awards: React.FC<{ games: ViewGame[] }> = ({ games }) => {
+  const awards = nightAwards(games);
+  if (!awards.length) return null;
+  return (
+    <div className="grid grid-cols-3 gap-2 mb-3">
+      {awards.map(a => (
+        <div key={a.title} className="rounded-xl bg-[#FFF3EA] border border-[#FFD2B5] px-2.5 py-2 min-w-0">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-[#C94E00]">{a.title}</p>
+          <p className="text-sm font-bold leading-tight line-clamp-2">{a.names.length > 2 ? `${a.names[0]} + ${a.names.length - 1} more` : a.names.join(' & ')}</p>
+          <p className="text-xs text-gray-600">{a.value}</p>
+        </div>
+      ))}
+    </div>
   );
 };
 
@@ -114,7 +202,6 @@ type Where =
   | { kind: 'next' }
   | { kind: 'shootout'; spots: number }
   | { kind: 'later'; games: number | string }
-  | { kind: 'away' }
   | { kind: 'filling' }
   | { kind: 'waiting' };
 
@@ -125,8 +212,8 @@ export const lineStatus = (s: PublicState): Map<string, Where> => {
   const all = s.waitingQueue.flatMap(i => ('players' in i ? i.players : [i]));
   const teamsFull = s.champions.length === 5 && s.challengers.length === 5;
   if (!teamsFull) {
-    const filling = s.champions.length + s.challengers.length + all.filter(p => !p.away).length >= 10;
-    all.forEach(p => out.set(p.id, p.away ? { kind: 'away' } : filling ? { kind: 'filling' } : { kind: 'waiting' }));
+    const filling = s.champions.length + s.challengers.length + all.length >= 10;
+    all.forEach(p => out.set(p.id, filling ? { kind: 'filling' } : { kind: 'waiting' }));
     return out;
   }
   const next = previewNextUp(asQueue(s.waitingQueue));
@@ -136,8 +223,7 @@ export const lineStatus = (s: PublicState): Map<string, Where> => {
   s.waitingQueue.forEach(item => {
     const players = 'players' in item ? item.players : [item];
     players.forEach(p => {
-      if (p.away) out.set(p.id, { kind: 'away' });
-      else if (picked.has(p.id)) out.set(p.id, { kind: 'next' });
+      if (picked.has(p.id)) out.set(p.id, { kind: 'next' });
       else if (shooters.has(p.id)) out.set(p.id, { kind: 'shootout', spots: next.shootout!.spots });
       else {
         const g = calculateGamesBehindIndividual(ahead);
@@ -157,7 +243,6 @@ const spotFor = (s: PublicState, name: string): string => {
   const is = (p: PublicPlayer) => p.name.trim().toLowerCase() === k;
   if (s.champions.some(is)) return 'On the Champions now';
   if (s.challengers.some(is)) return 'On the Challengers now';
-  if (s.sittingOut.some(p => p.name.trim().toLowerCase() === k)) return 'Sitting out';
   const me = s.waitingQueue.flatMap(i => ('players' in i ? i.players : [i])).find(is);
   if (me) {
     const w = lineStatus(s).get(me.id);
@@ -165,7 +250,6 @@ const spotFor = (s: PublicState, name: string): string => {
       case 'next': return 'Up next game';
       case 'shootout': return `Shooting for ${spots(w.spots)} next game`;
       case 'later': return `${w.games} games away`;
-      case 'away': return 'In line, sitting out for now (keeps their place)';
       case 'filling': return 'In line. A spot on court is open and the runner is filling it.';
       default: return 'In line. Teams fill as players sign in.';
     }
@@ -173,13 +257,15 @@ const spotFor = (s: PublicState, name: string): string => {
   return s.playersTonight.some(n => n.trim().toLowerCase() === k) ? 'Signed in earlier, not in line now' : 'Not signed in';
 };
 
-const FindMe: React.FC<{ state: PublicState }> = ({ state }) => {
-  const [q, setQ] = React.useState(() => { try { return window.localStorage.getItem('pbm-run-me') ?? ''; } catch { return ''; } });
-  React.useEffect(() => { try { window.localStorage.setItem('pbm-run-me', q); } catch { /* fine */ } }, [q]);
+const FindMe: React.FC<{ state: PublicState; token: string }> = ({ state, token }) => {
+  // Remembered per run, so a phone that follows two runs keeps the right name for each
+  const key = `pbm-run-me-${token}`;
+  const [q, setQ] = React.useState(() => { try { return window.localStorage.getItem(key) ?? window.localStorage.getItem('pbm-run-me') ?? ''; } catch { return ''; } });
+  React.useEffect(() => { try { window.localStorage.setItem(key, q); } catch { /* fine */ } }, [q, key]);
   const everyone = Array.from(new Set([
     ...state.champions, ...state.challengers,
     ...state.waitingQueue.flatMap(i => ('players' in i ? i.players : [i])),
-  ].map(p => p.name).concat(state.sittingOut.map(p => p.name))));
+  ].map(p => p.name)));
   const typed = q.trim().toLowerCase();
   const matches = typed ? everyone.filter(n => n.toLowerCase().includes(typed)).slice(0, 4) : [];
   return (
@@ -215,8 +301,8 @@ const Line: React.FC<{ state: PublicState }> = ({ state }) => {
   state.waitingQueue.forEach(item => {
     const players = 'players' in item ? item.players : [item];
     const group = 'players' in item;
-    // How far away, said once wherever it changes (sitting out doesn't change it)
-    const w = players.map(p => status.get(p.id)).find(x => x && x.kind !== 'away');
+    // How far away, said once wherever it changes
+    const w = players.map(p => status.get(p.id)).find(Boolean);
     const label = !w ? '' : w.kind === 'next' ? 'Next game' : w.kind === 'shootout' ? `Next game: shootout for ${spots(w.spots)}` : w.kind === 'later' ? `${w.games} games away` : '';
     if (label && label !== lastLabel) {
       rows.push(<li key={`h-${item.id}`} className="pt-3 pb-1 text-xs font-bold uppercase tracking-wide text-gray-500">{label}</li>);
@@ -230,8 +316,7 @@ const Line: React.FC<{ state: PublicState }> = ({ state }) => {
           return (
             <div key={p.id} className="flex items-center gap-3 py-0.5">
               <span className="w-6 text-right tabular-nums text-gray-400 text-sm">{n}</span>
-              <span className={`flex-1 truncate font-semibold ${p.away ? 'text-gray-400' : ''}`}>{p.name}</span>
-              {p.away ? <span className="text-xs font-bold rounded-full bg-gray-100 text-gray-600 px-2 py-0.5">Sitting out</span> : null}
+              <span className="flex-1 truncate font-semibold">{p.name}</span>
             </div>
           );
         })}
@@ -253,7 +338,7 @@ const NowPlaying: React.FC<{ state: PublicState; skewMs: number; now: number }> 
   const cState = clockState(clock, now);
   const scoring = gameOn && (cState !== 'not-started' || state.score.champions + state.score.challengers > 0);
   const outcome = decide(state.score, clock, now);
-  const available = state.waitingQueue.flatMap(i => ('players' in i ? i.players : [i])).filter(p => !p.away).length;
+  const available = state.waitingQueue.flatMap(i => ('players' in i ? i.players : [i])).length;
   const filling = !gameOn && state.champions.length + state.challengers.length + available >= 10;
   const note = !scoring ? null
     : outcome.nextBucket ? 'Time. Next bucket wins'
@@ -309,11 +394,13 @@ const NextUp: React.FC<{ state: PublicState }> = ({ state }) => {
   );
 };
 
-const RunView: React.FC<{ token: string; fetcher?: (t: string) => Promise<FetchResult> }> = ({ token, fetcher = fetchRunView }) => {
+const RunView: React.FC<{ token: string; fetcher?: (t: string) => Promise<FetchResult>; onRunGone?: () => void }> = ({ token, fetcher = fetchRunView, onRunGone }) => {
   const [view, setView] = React.useState<View | null>(null);
   const [problem, setProblem] = React.useState<'gone' | 'offline' | null>(null);
   const [now, setNow] = React.useState(Date.now());
   const [tab, setTab] = React.useState<'tonight' | 'all'>('tonight');
+  const [player, setPlayer] = React.useState<string | null>(null);
+  const [switching, setSwitching] = React.useState(false);
 
   React.useEffect(() => {
     document.title = 'Live run · Pickup Basketball Manager';
@@ -337,8 +424,12 @@ const RunView: React.FC<{ token: string; fetcher?: (t: string) => Promise<FetchR
       // A slow answer to an older request never replaces a newer one
       if (stop || mine < shown) return;
       shown = mine;
-      if (r.ok) { setView(r.view); setProblem(null); }
-      else setProblem(r.reason);
+      if (r.ok) { setView(r.view); setProblem(null); saveLastRunToken(token); }
+      else {
+        setProblem(r.reason);
+        // This phone won't keep opening a link that stopped working
+        if (r.reason === 'gone' && lastRunToken() === token) saveLastRunToken(null);
+      }
       if (mine === asked && !(r.ok === false && r.reason === 'gone') && document.visibilityState !== 'hidden') timer = setTimeout(load, POLL_MS);
     };
     // Paused while the phone is locked or in another app; catches up straight away when it's back
@@ -359,8 +450,16 @@ const RunView: React.FC<{ token: string; fetcher?: (t: string) => Promise<FetchR
       <header className="bg-[#0E1A33] text-white px-4 pt-4 pb-3">
         <div className="max-w-xl mx-auto">
           <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#F5B301]">Pickup Basketball Manager</p>
-          <h1 className="text-2xl font-black leading-tight mt-0.5">{view?.run.name ?? 'Live run'}</h1>
+          <div className="flex items-start justify-between gap-3">
+            <h1 className="text-2xl font-black leading-tight mt-0.5 min-w-0">{view?.run.name ?? 'Live run'}</h1>
+            <button onClick={() => setSwitching(v => !v)} aria-expanded={switching} className="shrink-0 mt-1 rounded-lg border border-white/30 px-2.5 py-1 text-sm font-semibold text-white/90">Switch run</button>
+          </div>
           {sub}
+          {switching && (
+            <div className="mt-3 rounded-xl bg-white text-[#1B2430] p-3">
+              <CodeEntry autoFocus onFound={t => { saveLastRunToken(t); window.location.assign(`${window.location.pathname}?run=${t}`); }} />
+            </div>
+          )}
         </div>
       </header>
       <main className="max-w-xl mx-auto px-4 py-4 space-y-4">{children}</main>
@@ -368,10 +467,12 @@ const RunView: React.FC<{ token: string; fetcher?: (t: string) => Promise<FetchR
   );
 
   if (problem === 'gone') {
+    if (onRunGone) { onRunGone(); return null; }
     return shell(
       <Card>
         <p className="text-lg font-bold">This link doesn't work anymore.</p>
-        <p className="text-gray-600 mt-1">The runner may have made a new one. Ask for the new link or scan the code at the court.</p>
+        <p className="text-gray-600 mt-1">The runner may have made a new one. Type the code from the court screen, or scan its QR code.</p>
+        <div className="mt-3"><CodeEntry onFound={t => window.location.assign(`${window.location.pathname}?run=${t}`)} /></div>
       </Card>
     );
   }
@@ -394,6 +495,7 @@ const RunView: React.FC<{ token: string; fetcher?: (t: string) => Promise<FetchR
   const sub = (
     <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
       {view.run.gym && <span className="text-white/70">{view.run.gym}</span>}
+      {view.run.code && <span className="text-white/70">Code <span className="font-black tracking-wider text-white">{view.run.code}</span></span>}
       {problem === 'offline' ? (
         <span className="inline-flex items-center gap-1.5 text-white/80"><span className="h-2 w-2 rounded-full bg-gray-400" />Reconnecting…</span>
       ) : live ? (
@@ -408,10 +510,15 @@ const RunView: React.FC<{ token: string; fetcher?: (t: string) => Promise<FetchR
   const nights = new Set(view.games.map(g => g.nightId)).size;
   const tonightLabel = (old || ended) && night?.startedAt ? dayName(night.startedAt + view.serverOffsetMs) : 'Tonight';
 
+  if (player) {
+    return shell(<PlayerPage name={player} all={view.games} tonight={tonightGames} tonightLabel={tonightLabel} onBack={() => setPlayer(null)} />, sub);
+  }
+
   return shell(
     <>
       {state && !ended && !old ? (
         <>
+          <FindMe state={state} token={token} />
           {state.shootout && (
             <section className="rounded-2xl bg-[#0E1A33] text-white p-4" role="status">
               <p className="text-xs font-bold uppercase tracking-[0.25em] text-[#F5B301]">3-point shootout</p>
@@ -421,17 +528,11 @@ const RunView: React.FC<{ token: string; fetcher?: (t: string) => Promise<FetchR
           )}
           <NowPlaying state={state} skewMs={view.skewMs} now={now} />
           <NextUp state={state} />
-          <FindMe state={state} />
           <Line state={state} />
-          {state.sittingOut.length > 0 && (
-            <Card title="Sitting out">
-              <ul className="space-y-1">{state.sittingOut.map(p => <li key={p.id} className="font-semibold text-gray-700">{p.name}</li>)}</ul>
-            </Card>
-          )}
         </>
       ) : (
         <Card>
-          <p className="text-lg font-bold">{ended ? "That's a wrap for this run." : 'No run going right now.'}</p>
+          <p className="text-lg font-bold">{ended ? 'Tonight has ended.' : 'No run going right now.'}</p>
           <p className="text-gray-600 mt-1">
             {night?.startedAt ? `Last run: ${dayName(night.startedAt + view.serverOffsetMs)}. ` : ''}
             This page updates on its own when the next one starts.
@@ -451,18 +552,18 @@ const RunView: React.FC<{ token: string; fetcher?: (t: string) => Promise<FetchR
         {tab === 'tonight' ? (
           <>
             {state && (
-              <div className="flex gap-3 mb-3">
-                <div className="flex-1 rounded-xl bg-[#EDEFF2] px-3 py-2"><p className="text-xs font-semibold text-gray-500">Games</p><p className="text-2xl font-black tabular-nums">{tonightGames.length}</p></div>
-                <div className="flex-1 rounded-xl bg-[#EDEFF2] px-3 py-2"><p className="text-xs font-semibold text-gray-500">Players</p><p className="text-2xl font-black tabular-nums">{state.playersTonight.length}</p></div>
-                <div className="flex-[1.4] rounded-xl bg-[#EDEFF2] px-3 py-2 min-w-0"><p className="text-xs font-semibold text-gray-500">Best streak</p><p className="text-base font-bold leading-tight truncate">{state.bestStreak && state.bestStreak.count >= 2 ? `${state.bestStreak.count} straight` : 'None yet'}</p></div>
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                <Tile label="Games" value={tonightGames.length} />
+                <Tile label="Players" value={state.playersTonight.length} />
               </div>
             )}
-            <StatsTable rows={totalsByName(tonightGames)} empty="No games finished yet." />
+            <Awards games={tonightGames} />
+            <StatsTable rows={playerLines(tonightGames)} empty="No games finished yet." onPick={setPlayer} />
           </>
         ) : (
           <>
             <p className="text-sm text-gray-500 mb-2">{nights === 1 ? 'From 1 run' : `From ${nights} runs`}{view.games.length >= 500 ? ', most recent 500 games' : ''}. Players are matched by name.</p>
-            <StatsTable rows={totalsByName(view.games)} empty="No games yet." />
+            <StatsTable rows={playerLines(view.games)} empty="No games yet." onPick={setPlayer} />
           </>
         )}
       </Card>

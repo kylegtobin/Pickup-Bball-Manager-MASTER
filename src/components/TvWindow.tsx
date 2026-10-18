@@ -9,6 +9,7 @@ const Follower: React.FC = () => {
   const { setGameState } = useGame();
   const [link, setLink] = React.useState<'waiting' | 'live' | 'lost' | 'none'>(() => (window.opener ? 'waiting' : 'none'));
   const [sample, setSample] = React.useState(false);
+  const [phoneCode, setPhoneCode] = React.useState<string | null>(null);
   const lastHeard = React.useRef(0);
 
   React.useEffect(() => {
@@ -23,6 +24,7 @@ const Follower: React.FC = () => {
       if (!m || m.type !== 'pbm-tv-state' || !m.state) return;
       show(m.state);
       setSample(!!m.sample);
+      setPhoneCode(m.phoneCode ?? null);
       lastHeard.current = Date.now();
       setLink('live');
     };
@@ -49,7 +51,7 @@ const Follower: React.FC = () => {
     };
   }, [setGameState]);
 
-  return <CourtView viewer link={link === 'none' ? 'unlinked' : link} isSample={sample} onClose={() => window.close()} />;
+  return <CourtView viewer link={link === 'none' ? 'unlinked' : link} isSample={sample} phoneCode={phoneCode} onClose={() => window.close()} />;
 };
 
 // The second-screen window: its own in-memory copy that only follows the window that opened it

@@ -4,7 +4,7 @@ import { findSelection } from '../utils/selection';
 
 // Shown while manual mode is on: says what's happening, what's picked up, and how to finish.
 const ArrangeBar: React.FC<{ stickyTop: string }> = ({ stickyTop }) => {
-  const { gameState, selectedPlayerId, setSelectedPlayerId, removePlayer, sitOut, bringBack, toggleManualMode } = useGame();
+  const { gameState, selectedPlayerId, setSelectedPlayerId, removePlayer, toggleManualMode } = useGame();
   const selection = findSelection(gameState, selectedPlayerId);
 
   React.useEffect(() => {
@@ -36,16 +36,8 @@ const ArrangeBar: React.FC<{ stickyTop: string }> = ({ stickyTop }) => {
           <>
             {selection.kind === 'player' && (
               <button
-                onClick={() => { (selection.player.away ? bringBack : sitOut)(selection.player.id); setSelectedPlayerId(null); }}
-                title={selection.player.away ? 'Back from sitting out' : 'Off for a bit. In line they keep their place; on court their spot opens up.'}
-                className="px-4 py-2 rounded-lg border-2 border-[#F5B301] text-[#F5B301] hover:bg-[#F5B301] hover:text-[#1B2430] font-semibold"
-              >
-                {selection.player.away ? 'Back' : 'Sit out'}
-              </button>
-            )}
-            {selection.kind === 'player' && (
-              <button
                 onClick={() => { removePlayer(selection.player.id); setSelectedPlayerId(null); }}
+                title="Takes them off the court or out of the line. If they come back, they sign in again at the end of the line."
                 className="px-4 py-2 rounded-lg border-2 border-red-400 text-red-200 hover:bg-red-500 hover:text-white font-semibold"
               >
                 Remove {selection.player.name}

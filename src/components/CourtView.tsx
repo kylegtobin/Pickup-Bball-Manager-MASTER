@@ -91,7 +91,7 @@ const Spotlight: React.FC<{ spots: number; shooters: Player[]; alreadyIn: number
   </div>
 );
 
-const CourtView: React.FC<{ onClose: () => void; isSample?: boolean; viewer?: boolean; link?: 'waiting' | 'live' | 'lost' | 'unlinked' }> = ({ onClose, isSample, viewer, link }) => {
+const CourtView: React.FC<{ onClose: () => void; isSample?: boolean; viewer?: boolean; link?: 'waiting' | 'live' | 'lost' | 'unlinked'; phoneCode?: string | null }> = ({ onClose, isSample, viewer, link, phoneCode }) => {
   const { gameState, addPoints, startClock, pauseClock, handleGameEnd, undo, canUndo, undoLabel } = useGame();
   const [fixing, setFixing] = React.useState(false);
   const [recording, setRecording] = React.useState(false);
@@ -223,6 +223,13 @@ const CourtView: React.FC<{ onClose: () => void; isSample?: boolean; viewer?: bo
         <div role="alert" className="cb-notice bad">{TV_BLOCKED_MESSAGE} <button className="cb-btn" onClick={() => setTvBlocked(false)}>OK</button></div>
       )}
       {isSample && <span className="cb-sample">Sample</span>}
+      {phoneCode && !isSample && (
+        <div className="cb-phone" aria-label={`Follow on your phone at ${window.location.host} with code ${phoneCode}`}>
+          <span>On your phone</span>
+          <b>{phoneCode}</b>
+          <small>{window.location.host}</small>
+        </div>
+      )}
       {party && <Celebration game={party} streak={gameState.championStreak} onDone={() => setParty(null)} />}
       {!party && shootout && <Spotlight spots={gameState.requiredPlayers} shooters={shootout.players} alreadyIn={challengers.length} />}
 

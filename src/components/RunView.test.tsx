@@ -11,12 +11,12 @@ const state = (over: Partial<PublicState> = {}): PublicState => ({
   v: 1, sentAt: Date.now(), nightId: 'n1',
   champions: five(['Arlo', 'Bryn', 'Cale', 'Dove', 'Emry']),
   challengers: five(['Fenn', 'Gray', 'Hale', 'Isla', 'Jory']),
-  waitingQueue: [], sittingOut: [], score: newScore(), clock: newClock(), gameStartTime: null,
+  waitingQueue: [], score: newScore(), clock: newClock(), gameStartTime: null,
   championStreak: 0, gamesPlayed: 0, bestStreak: null, playersTonight: [], sessionStartedAt: null, shootout: null,
   ...over,
 });
 const view = (s: PublicState, name = 'Test Run'): View => ({
-  run: { name, gym: null, courtSeenAt: Date.now() },
+  run: { name, gym: null, courtSeenAt: Date.now(), code: 'BFH34R' },
   night: { id: 'n1', state: s, updatedAt: Date.now(), startedAt: Date.now() - 1000, endedAt: null },
   games: [], skewMs: 0, serverOffsetMs: 0, receivedAt: Date.now(),
 });

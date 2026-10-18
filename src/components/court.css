@@ -152,6 +152,12 @@
 .cb-btn[aria-pressed='true'] { background: var(--ink); color: #fff; }
 .cb-btn.exit { background: var(--ink); color: #fff; }
 .cb-btn:focus-visible, .cb-scorebtn:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+.cb-phone { position: absolute; left: clamp(12px, 1.4vw, 28px); top: clamp(14px, 1.9vh, 28px); width: calc(var(--gutter) - clamp(16px, 1.6vw, 32px)); z-index: 6;
+  display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 6px 9px; border-radius: 12px; background: var(--board); color: #fff; text-align: center;
+  box-shadow: inset 0 0 0 3px var(--board-edge), 0 10px 20px -12px rgba(15, 27, 45, 0.6); }
+.cb-phone span { font-size: 11px; font-weight: 700; letter-spacing: 0.04em; color: #C9D3E3; }
+.cb-phone b { font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif; font-style: italic; font-weight: 900; font-size: clamp(22px, 2vw, 34px); line-height: 1; letter-spacing: 0.04em; color: var(--gold); }
+.cb-phone small { font-size: 10px; color: #C9D3E3; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cb-sample { position: absolute; left: clamp(12px, 1.4vw, 28px); top: clamp(14px, 1.9vh, 28px); width: calc(var(--gutter) - clamp(16px, 1.6vw, 32px)); text-align: center; z-index: 6; font-weight: 800; font-size: 14px; padding: 6px 12px; border-radius: 999px; background: var(--gold); color: var(--ink); }
 
 /* Score buttons for the runner (laptop court view only), tucked under the scoreboard */

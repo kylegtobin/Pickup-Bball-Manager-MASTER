@@ -46,6 +46,16 @@ export const GameRules: React.FC = () => (
     </section>
 
     <section className="gd-sec">
+      <Head icon="user" tone="d">Your name</Head>
+      <ul className="gd-list n">
+        <li>Sign in with your <strong>first name and last initial</strong>, like Mike S.</li>
+        <li>Two of you? The second one adds a letter, like <strong>Mike Sm.</strong>, or uses their full name.</li>
+        <li>Known at the gym by a nickname? Go with it.</li>
+        <li>Use the same name every time so your games add up.</li>
+      </ul>
+    </section>
+
+    <section className="gd-sec">
       <Head icon="ball" tone="o">Scoring</Head>
       <ul className="gd-list">
         <li>Buckets count <strong>1</strong>, threes count <strong>2</strong>.</li>
@@ -73,8 +83,7 @@ export const GameRules: React.FC = () => (
     <section className="gd-sec">
       <Head icon="pause" tone="d">Stepping away</Head>
       <ul className="gd-list n">
-        <li>Sitting out keeps your place in line. If your turn comes while you're out, you go to the <strong>end of the line</strong>.</li>
-        <li>Sign in again when you're back.</li>
+        <li>Leaving the line, even for a minute, means signing in again at the <strong>end of the line</strong>.</li>
       </ul>
     </section>
 
@@ -89,7 +98,7 @@ export const UserGuide: React.FC = () => (
         <Head icon="user" tone="o">Sign in</Head>
         <ul className="gd-list">
           <li>Tap <strong>Sign in</strong>, then your name.</li>
-          <li>New? Type it once. It's saved on this device for next time.</li>
+          <li>New? Type your <strong>first name and last initial</strong>, like Mike S. It's saved on this device for next time.</li>
           <li>The app tells you where you are, like "2 games away".</li>
         </ul>
       </section>
@@ -147,12 +156,10 @@ export const UserGuide: React.FC = () => (
             <li>Turn on <strong>Manual mode</strong>, tap a player, then tap where they go. Dragging works too.</li>
             <li>Tap a group's name to move the whole group.</li>
             <li><strong>Swap</strong> trades a player in line with one on court.</li>
-            <li>Tap <strong>Done</strong> when you're finished.</li>
           </ul>
           <ul className="gd-list">
-            <li><strong>Sit out</strong> keeps their place in line, or opens their spot on court. <strong>Back</strong> brings them back.</li>
-            <li><strong>Left</strong> means they went home.</li>
-            <li>To remove someone: <strong>Remove</strong> in Manual mode, right-click their name, or use the <strong>Name to remove</strong> box.</li>
+            <li>To remove someone: <strong>Remove</strong> in Manual mode, right-click their name, or use the <strong>Name to remove</strong> box. If they come back, they sign in again at the end of the line.</li>
+            <li>Tap <strong>Done</strong> when you're finished.</li>
           </ul>
         </div>
       </section>
@@ -164,5 +171,69 @@ export const UserGuide: React.FC = () => (
         </ul>
       </section>
     </div>
+  </div>
+);
+
+const LinkedInIcon = () => (
+  <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+    <path fill="currentColor" d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z" />
+  </svg>
+);
+const InstagramIcon = () => (
+  <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2">
+    <rect x="3" y="3" width="18" height="18" rx="5" />
+    <circle cx="12" cy="12" r="4" />
+    <circle cx="17.3" cy="6.7" r="1.1" fill="currentColor" stroke="none" />
+  </svg>
+);
+
+export const MyStory: React.FC<{ photos: [string, string] }> = ({ photos }) => (
+  <div className="gd">
+    <div className="st-hero">
+      <p className="st-eyebrow">Hi, I'm Kyle Tobin</p>
+      <h3 className="st-title">Less arguing, <span>more ballin’.</span></h3>
+      <p className="st-lede">I play pickup at Midtown Athletic Club in Chicago, and I designed and built this site so the run takes care of itself.</p>
+      <div className="st-chips">
+        <span>Multiple-time Midtown League champ</span>
+        <span>Midtown Athletic Club regular</span>
+        <span>Designer and developer</span>
+      </div>
+    </div>
+
+    <div className="st-compare">
+      <section className="st-col before">
+        <h4>Before</h4>
+        <ul className="gd-list n">
+          <li>Names scribbled on paper, or kept in your head</li>
+          <li>Arguments over who's next</li>
+          <li>No idea how long you'd wait</li>
+        </ul>
+      </section>
+      <section className="st-col after">
+        <h4>Now</h4>
+        <ul className="gd-list">
+          <li>A fair rotation everyone can see</li>
+          <li>Sign in with a tap and see your spot</li>
+          <li>Wait times, a scoreboard and the game on the TV</li>
+        </ul>
+      </section>
+    </div>
+
+    <p className="st-goal">The goal is simple: <strong>a great run for everyone who shows up.</strong></p>
+
+    <div className="st-photos">
+      <figure><img src={photos[0]} alt="Midtown League champions" /></figure>
+      <figure><img src={photos[1]} alt="Midtown League champions" /></figure>
+    </div>
+
+    <div className="st-connect">
+      <p className="st-connect-title gd-display">Let's connect</p>
+      <div className="st-links">
+        <a className="st-link li" href="https://www.linkedin.com/in/kylegtobin/" target="_blank" rel="noopener noreferrer"><LinkedInIcon />LinkedIn</a>
+        <a className="st-link ig" href="https://www.instagram.com/kyle.tobin/" target="_blank" rel="noopener noreferrer"><InstagramIcon />Instagram</a>
+      </div>
+    </div>
+
+    <p className="gd-foot gd-display">See you on the court. <span>🏀</span></p>
   </div>
 );
