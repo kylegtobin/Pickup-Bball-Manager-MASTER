@@ -1,3 +1,5 @@
+import { Score, Clock, EndedBy } from '../utils/score';
+
 export interface Player {
   id: string;
   name: string;
@@ -9,7 +11,7 @@ export interface Regular {
   id: string;
   name: string;
   nights: number;
-  lastNight: number | null; // sessionStartedAt of the last night they signed in
+  lastNight: string | number | null; // id of the last night they signed in (older saves used a timestamp)
 }
 
 // A finished night kept in this device's archive
@@ -30,6 +32,7 @@ export interface PlayerRef {
 }
 
 export interface GameRecord {
+  id?: string; // Stable id for this game (older saves don't have one)
   n: number; // Game number tonight, starting at 1
   startedAt: number | null;
   endedAt: number;
@@ -38,6 +41,9 @@ export interface GameRecord {
   losers: PlayerRef[];
   // The shootout that followed this game, if there was one
   shootout?: { spots: number; shooters: PlayerRef[]; picked: PlayerRef[] };
+  // Final score when it was kept (sides as they were during the game), and how it ended
+  final?: Score;
+  endedBy?: EndedBy;
 }
 
 export interface PreviousTeam {
@@ -93,6 +99,10 @@ export interface GameState {
   lastResultAt: number | null;
   playersTonight: string[]; // Everyone who signed in tonight, even if they left
   games: GameRecord[]; // Every finished game tonight, in order
+  nightId: string | null; // Stable id for tonight, set at the first sign-in
+  // Scoreboard for the game being played
+  score: Score;
+  clock: Clock;
 }
 
 // New wait time related types
