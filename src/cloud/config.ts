@@ -16,6 +16,10 @@ const set = (k: string, v: string | null) => {
   try { if (v === null) window.localStorage.removeItem(k); else window.localStorage.setItem(k, v); } catch { /* blocked */ }
 };
 
+// Phone view for everyone: the runner's Phone view button and the phone landing page. Off until the
+// runner's email sign-in has been tested on the live site; until then ?cloud=1 turns it on per browser.
+export const PHONE_VIEW_FOR_EVERYONE = false;
+
 // ?cloud=1 turns it on for this browser, ?cloud=0 turns it off. The setting sticks.
 export const readCloudSwitch = (): boolean => {
   try {
@@ -29,7 +33,7 @@ export const readCloudSwitch = (): boolean => {
       window.history.replaceState(window.history.state, '', u.pathname + u.search + u.hash);
     }
   } catch { /* fine */ }
-  return get(SWITCH_KEY) === '1';
+  return PHONE_VIEW_FOR_EVERYONE || get(SWITCH_KEY) === '1';
 };
 
 export const setCloudSwitch = (on: boolean) => set(SWITCH_KEY, on ? '1' : null);
@@ -40,6 +44,25 @@ export const runViewToken = (): string | null => {
     const t = new URLSearchParams(window.location.search).get('run');
     return t && /^[A-Za-z0-9_-]{16,64}$/.test(t) ? t : null;
   } catch { return null; }
+};
+
+// ?code=BFH34R, for a printed link or a sign at the court
+export const runCodeParam = (): string | null => {
+  try {
+    const c = (new URLSearchParams(window.location.search).get('code') ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    return /^[A-HJ-NP-Z2-9]{6}$/.test(c) ? c : null;
+  } catch { return null; }
+};
+
+// The run this phone followed last, so it opens straight to it next time
+export const lastRunToken = () => get('pbm-phone-last-run');
+export const saveLastRunToken = (t: string | null) => set('pbm-phone-last-run', t);
+// Someone running the games from a phone asked for the full app
+export const runnerOnThisPhone = () => get('pbm-phone-runner') === '1';
+export const setRunnerOnThisPhone = (on: boolean) => set('pbm-phone-runner', on ? '1' : null);
+// A phone (not a tablet or laptop): small screen and a touch screen
+export const isPhone = (): boolean => {
+  try { return window.matchMedia('(max-width: 640px)').matches && window.matchMedia('(pointer: coarse)').matches; } catch { return false; }
 };
 
 export const savedRunId = () => get(RUN_KEY);

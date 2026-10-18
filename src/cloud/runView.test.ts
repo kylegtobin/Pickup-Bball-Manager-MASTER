@@ -6,7 +6,7 @@ const state = (sentAt: number) => toPublicState({
   ...defaultGameState,
   nightId: 'n1',
   champions: [{ id: 'a', name: 'Arlo', rid: 'r-1' }],
-  waitingQueue: [{ type: 'PreviousTeam', id: 't', players: [{ id: 'b', name: 'Bryn', away: 5 }] }],
+  waitingQueue: [{ type: 'PreviousTeam', id: 't', players: [{ id: 'b', name: 'Bryn' }] }],
   status: 'SHOOTOUT',
   requiredPlayers: 2,
   shootoutTeam: { type: 'PreviousTeam', id: 't', players: [{ id: 'b', name: 'Bryn' }] },
@@ -15,7 +15,7 @@ const state = (sentAt: number) => toPublicState({
 test('the public picture keeps names and the line, and drops saved-regular ids', () => {
   const s = state(1000);
   expect(s.champions).toEqual([{ id: 'a', name: 'Arlo' }]);
-  expect(s.waitingQueue).toEqual([{ type: 'PreviousTeam', id: 't', players: [{ id: 'b', name: 'Bryn', away: 5 }] }]);
+  expect(s.waitingQueue).toEqual([{ type: 'PreviousTeam', id: 't', players: [{ id: 'b', name: 'Bryn' }] }]);
   expect(s.shootout).toEqual({ spots: 2, players: [{ id: 'b', name: 'Bryn' }] });
   expect(Object.keys(s)).not.toContain('notification');
 });

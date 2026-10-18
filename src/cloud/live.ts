@@ -29,10 +29,11 @@ const fail = (error: { message?: string } | null) => {
   if (error) throw new Error(error.message || 'Something went wrong');
 };
 
-export interface RunInfo { id: string; name: string; gym: string | null; viewToken: string; writerDevice: string | null }
+export interface RunInfo { id: string; name: string; gym: string | null; viewToken: string; code: string | null; writerDevice: string | null }
 
-const toRun = (r: { id: string; name: string; gym: string | null; view_token: string; writer_device: string | null }): RunInfo =>
-  ({ id: r.id, name: r.name, gym: r.gym, viewToken: r.view_token, writerDevice: r.writer_device });
+const RUN_COLUMNS = 'id, name, gym, view_token, code, writer_device';
+const toRun = (r: { id: string; name: string; gym: string | null; view_token: string; code?: string | null; writer_device: string | null }): RunInfo =>
+  ({ id: r.id, name: r.name, gym: r.gym, viewToken: r.view_token, code: r.code ?? null, writerDevice: r.writer_device });
 
 export const cloud = {
   async session(): Promise<Session | null> {
@@ -58,19 +59,22 @@ export const cloud = {
     fail(error);
   },
   async myRuns(): Promise<RunInfo[]> {
-    const { data, error } = await getClient().from('runs').select('id, name, gym, view_token, writer_device').order('created_at');
+    const { data, error } = await getClient().from('runs').select(RUN_COLUMNS).order('created_at');
     fail(error);
     return (data ?? []).map(toRun);
   },
   async createRun(name: string, gym: string | null): Promise<RunInfo> {
-    const { data, error } = await getClient().from('runs').insert({ name, gym }).select('id, name, gym, view_token, writer_device').single();
+    const { data, error } = await getClient().from('runs').insert({ name, gym }).select(RUN_COLUMNS).single();
     fail(error);
     return toRun(data!);
   },
-  async resetLink(runId: string): Promise<string> {
-    const { data, error } = await getClient().rpc('reset_view_token', { p_run: runId });
+  // A new link also gets a new code (the database does that), so read both back
+  async resetLink(runId: string): Promise<RunInfo> {
+    const { error } = await getClient().rpc('reset_view_token', { p_run: runId });
     fail(error);
-    return data as string;
+    const { data, error: e2 } = await getClient().from('runs').select(RUN_COLUMNS).eq('id', runId).single();
+    fail(e2);
+    return toRun(data!);
   },
 };
 

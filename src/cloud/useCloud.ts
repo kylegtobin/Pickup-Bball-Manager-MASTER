@@ -161,8 +161,8 @@ export const useCloud = (gameState: GameState, enabled: boolean): CloudControlle
     }, undefined),
     resetLink: () => guard(async () => {
       if (!run) return false;
-      const token = await mod!.cloud.resetLink(run.id);
-      setRuns(list => list.map(r => (r.id === run.id ? { ...r, viewToken: token } : r)));
+      const fresh = await mod!.cloud.resetLink(run.id);
+      setRuns(list => list.map(r => (r.id === run.id ? fresh : r)));
       return true;
     }, false),
     takeOver: () => { void engine.current?.takeOver(); },

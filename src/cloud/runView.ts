@@ -19,7 +19,7 @@ export interface ViewGame {
 }
 
 export interface RunView {
-  run: { name: string; gym: string | null; courtSeenAt: number | null };
+  run: { name: string; gym: string | null; courtSeenAt: number | null; code: string | null };
   night: { id: string; state: PublicState | null; updatedAt: number; startedAt: number | null; endedAt: number | null } | null;
   games: ViewGame[]; // newest first
   // How far this phone's clock is from the courtside screen's: add to a courtside time to get phone time
@@ -62,7 +62,8 @@ export const parseRunView = (raw: Raw | null, phoneNow = Date.now()): RunView | 
       ...(g.shootout && Array.isArray(g.shootout.picked) ? { shootout: { spots: Number(g.shootout.spots) || 0, shooters: refs(g.shootout.shooters), picked: refs(g.shootout.picked) } } : {}),
     })) : [];
   return {
-    run: { name: String(raw.run.name ?? 'Pickup run'), gym: raw.run.gym ? String(raw.run.gym) : null, courtSeenAt: ms(raw.run.courtSeenAt) },
+    run: { name: String(raw.run.name ?? 'Pickup run'), gym: raw.run.gym ? String(raw.run.gym) : null, courtSeenAt: ms(raw.run.courtSeenAt),
+      code: typeof raw.run.code === 'string' && /^[A-HJ-NP-Z2-9]{6}$/.test(raw.run.code) ? raw.run.code : null },
     night: n ? { id: String(n.id), state, updatedAt, startedAt: ms(n.startedAt), endedAt: ms(n.endedAt) } : null,
     games,
     skewMs,
@@ -89,6 +90,31 @@ export const fetchRunView = async (token: string, fetcher: typeof fetch = fetch)
     return { ok: false, reason: 'offline' };
   }
 };
+
+// A run found by its 6-character code, or the site's home run. Either way the answer includes the run's
+// link token, so the phone can keep following that run by its link.
+export type FindResult = { ok: true; token: string } | { ok: false; reason: 'none' | 'offline' };
+const find = async (fn: string, body: object, fetcher: typeof fetch): Promise<FindResult> => {
+  try {
+    const res = await fetcher(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
+      method: 'POST',
+      headers: { apikey: SUPABASE_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      cache: 'no-store',
+    });
+    if (!res.ok) return { ok: false, reason: 'offline' };
+    const raw = await res.json();
+    const token = raw && typeof raw.token === 'string' && /^[A-Za-z0-9_-]{16,64}$/.test(raw.token) ? raw.token : null;
+    return token ? { ok: true, token } : { ok: false, reason: 'none' };
+  } catch {
+    return { ok: false, reason: 'offline' };
+  }
+};
+// Letters and digits that can't be mixed up: no I, O, 0 or 1
+export const normalizeCode = (typed: string) => typed.toUpperCase().replace(/[^A-Z0-9]/g, '');
+export const looksLikeCode = (typed: string) => /^[A-HJ-NP-Z2-9]{6}$/.test(normalizeCode(typed));
+export const findRunByCode = (code: string, fetcher: typeof fetch = fetch) => find('get_run_view_by_code', { p_code: normalizeCode(code) }, fetcher);
+export const findHomeRun = (fetcher: typeof fetch = fetch) => find('get_home_run_view', {}, fetcher);
 
 // Player totals across games, matched by name (the same person on a different night is the same name)
 export interface Totals { name: string; games: number; wins: number }

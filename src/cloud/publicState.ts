@@ -3,7 +3,7 @@ import { Score, Clock } from '../utils/score';
 
 // What the phones see. Only what's on the courtside screen anyway: names, the line, the score.
 // Nothing else from this device (saved regulars, undo steps, settings) ever leaves it.
-export interface PublicPlayer { id: string; name: string; away?: number }
+export interface PublicPlayer { id: string; name: string }
 export interface PublicGroup { type: 'PreviousTeam'; id: string; players: PublicPlayer[] }
 export type PublicQueueItem = PublicPlayer | PublicGroup;
 
@@ -14,7 +14,6 @@ export interface PublicState {
   champions: PublicPlayer[];
   challengers: PublicPlayer[];
   waitingQueue: PublicQueueItem[];
-  sittingOut: { name: string; id: string; from: 'champions' | 'challengers' | 'line' }[];
   score: Score;
   clock: Clock;
   gameStartTime: number | null;
@@ -26,7 +25,7 @@ export interface PublicState {
   shootout: { spots: number; players: PublicPlayer[] } | null;
 }
 
-const player = (p: Player): PublicPlayer => (p.away ? { id: p.id, name: p.name, away: p.away } : { id: p.id, name: p.name });
+const player = (p: Player): PublicPlayer => ({ id: p.id, name: p.name });
 const item = (i: WaitingQueueItem): PublicQueueItem =>
   'players' in i ? { type: 'PreviousTeam', id: i.id, players: i.players.map(player) } : player(i);
 
@@ -37,7 +36,6 @@ export const toPublicState = (s: GameState, now = Date.now()): PublicState => ({
   champions: s.champions.map(player),
   challengers: s.challengers.map(player),
   waitingQueue: s.waitingQueue.map(item),
-  sittingOut: (s.sittingOut ?? []).map(e => ({ id: e.player.id, name: e.player.name, from: e.from })),
   score: s.score,
   clock: s.clock,
   gameStartTime: s.gameStartTime,
