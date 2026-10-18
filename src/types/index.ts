@@ -4,6 +4,7 @@ export interface Player {
   id: string;
   name: string;
   rid?: string; // Stable id of this player across nights (a saved regular on this device)
+  away?: number; // Sitting out while waiting in line (when they sat down). They keep their place.
 }
 
 // A saved regular: someone who has signed in on this device before
@@ -46,12 +47,18 @@ export interface GameRecord {
   endedBy?: EndedBy;
 }
 
-// Someone stepping off for a bit (water, a call, a tweak). They keep their name, not their spot on court.
+// Someone who stepped off the court for a bit (water, a call, a tweak). People waiting in line who sit out
+// stay in the line instead, marked away, so they keep their place.
 export interface SittingOut {
   player: Player;
   at: number; // When they sat down
   from: 'champions' | 'challengers' | 'line';
   index: number; // Their place in line when they sat down (line only)
+  gameNo?: number; // How many games were finished when they sat down
+  spotFilled?: boolean; // Someone took their open spot on court, so it isn't theirs to come back to
+  teamIds?: string[]; // Older saves: who was left on their team
+  groupId?: string; // The waiting group they were part of (line only)
+  behindId?: string | null; // Whoever was right behind them in line (line only)
 }
 
 export interface PreviousTeam {
