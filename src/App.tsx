@@ -11,12 +11,14 @@ import PBM1Logo from './assets/images/PBM 1.jpg';
 import ContentModal from './components/modal/ContentModal';
 import Champ1 from './assets/images/Champ 1.jpg';
 import Champ2 from './assets/images/Champ 2.jpg';
-import { createSampleGameState, isSampleLink } from './sample/sampleGame';
+import { createSample, isSampleLink } from './sample/sampleGame';
 import ScreenSizeNote from './components/ui/ScreenSizeNote';
 import ResumePrompt from './components/modal/ResumePrompt';
 import ArrangeBar from './components/ArrangeBar';
 import CourtView from './components/CourtView';
 import RecapModal from './components/modal/RecapModal';
+import SignInSheet from './components/modal/SignInSheet';
+import { describeSpot } from './utils/spot';
 import { useToast } from './components/ui/Toast';
 import './App.css';
 
@@ -30,6 +32,8 @@ const REAL_SESSION_KEY = 'pbm-session-v1';
 function App() {
   const [sampleOpen, setSampleOpen] = React.useState<boolean>(isSampleLink);
   const [sampleRun, setSampleRun] = React.useState(0);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const sampleSetup = React.useMemo(() => createSample(), [sampleRun, sampleOpen]);
 
   const exitSample = () => {
     setSampleOpen(false);
@@ -50,7 +54,7 @@ function App() {
       </div>
       {sampleOpen && (
         <ToastProvider key={sampleRun}>
-          <GameProvider initialState={createSampleGameState()}>
+          <GameProvider initialState={sampleSetup.state} initialRegulars={sampleSetup.regulars}>
             <PickupBasketballApp
               sample={{ onReset: () => setSampleRun(run => run + 1), onExit: exitSample }}
             />
@@ -106,7 +110,11 @@ function PickupBasketballApp({ sample, onTrySample }: PickupBasketballAppProps) 
     setErrorMessage,
     undo,
     canUndo,
-    undoLabel
+    undoLabel,
+    saveStatus,
+    otherTabOpen,
+    regulars,
+    lastAdded
   } = useGame();
   const { toast } = useToast();
 
@@ -124,6 +132,41 @@ function PickupBasketballApp({ sample, onTrySample }: PickupBasketballAppProps) 
   const [showError, setShowError] = React.useState(false);
   const [courtViewOpen, setCourtViewOpen] = React.useState(false);
   const [recapOpen, setRecapOpen] = React.useState(false);
+  const [signInOpen, setSignInOpen] = React.useState(false);
+  const [inputFocused, setInputFocused] = React.useState(false);
+
+  // Someone just signed in: mark their spot, and say where they are when it wasn't the sign-in sheet
+  const signInOpenRef = React.useRef(signInOpen);
+  signInOpenRef.current = signInOpen;
+  React.useEffect(() => {
+    if (!lastAdded) return;
+    if (!signInOpenRef.current) {
+      const spot = describeSpot(gameState, lastAdded.id);
+      toast(spot ? `${lastAdded.name} is in. ${spot}.` : `${lastAdded.name} is in.`, 'success');
+    }
+    const t = setTimeout(() => {
+      const el = document.querySelector(`[data-player-id="${lastAdded.id}"]`) as HTMLElement | null;
+      if (!el) return;
+      document.querySelectorAll('.pbm-just-added').forEach(x => x.classList.remove('pbm-just-added'));
+      void el.offsetWidth; // restart the animation
+      el.classList.add('pbm-just-added');
+      const r = el.getBoundingClientRect();
+      if (!signInOpenRef.current && (r.top < 0 || r.bottom > window.innerHeight)) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      setTimeout(() => el.classList.remove('pbm-just-added'), 3600);
+    }, 60);
+    return () => clearTimeout(t);
+    // Only when a new sign-in lands
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastAdded]);
+
+  // Saved names that match what's typed, for one-tap sign-in from the box
+  const signedIn = new Set(
+    [...champions, ...challengers, ...gameState.waitingQueue.flatMap(i => ('players' in i ? i.players : [i]))].map(p => p.name.toLowerCase())
+  );
+  const typed = newPlayerName.trim().toLowerCase();
+  const suggestions = typed
+    ? regulars.filter(r => !signedIn.has(r.name.toLowerCase()) && r.name.toLowerCase().includes(typed) && r.name.toLowerCase() !== typed).slice(0, 5)
+    : [];
   
   // Modal state
   const [activeModal, setActiveModal] = React.useState<{
@@ -198,6 +241,13 @@ function PickupBasketballApp({ sample, onTrySample }: PickupBasketballAppProps) 
   return (
     <div className="min-h-screen bg-[#EDEFF2] text-[#1B2430]">
       {sample && <SampleBanner onReset={sample.onReset} onExit={sample.onExit} />}
+      {!sample && otherTabOpen && (
+        <div role="alert" className="bg-amber-100 border-b-2 border-amber-400 text-gray-900">
+          <p className="max-w-6xl mx-auto px-4 py-2.5 text-base">
+            <strong>This app is open in another tab.</strong> Use just one, so the two don't save over each other.
+          </p>
+        </div>
+      )}
       <div className="px-6 py-4">
       <div className="container mx-auto px-4 py-2 max-w-6xl">
         {/* Header: logo left, menu right, one row */}
@@ -272,8 +322,8 @@ function PickupBasketballApp({ sample, onTrySample }: PickupBasketballAppProps) 
                         
                         <p className="font-bold mb-2">When It Happens</p>
                         <ul className="list-disc pl-6 mb-4">
-                          <li>A shootout takes place when there <strong>aren't enough new players</strong> to form a full 5-player Challengers team</li>
-                          <li>Players from a <strong>previous losing team</strong> compete for the <strong>1 to 4 open spots</strong></li>
+                          <li>A shootout takes place when the <strong>next group in line</strong> (a previous losing team) has <strong>more players than there are open spots</strong> on the Challengers</li>
+                          <li>Everyone in that group competes for the <strong>1 to 4 open spots</strong>. Nobody behind the group skips ahead.</li>
                         </ul>
                         
                         <p className="font-bold mb-2">How It Works</p>
@@ -308,11 +358,12 @@ function PickupBasketballApp({ sample, onTrySample }: PickupBasketballAppProps) 
                       <div className="text-lg">
                         <h3 className="text-xl font-bold mb-4">📋 Quick Start</h3>
                         <ul className="list-disc pl-6 mb-6">
-                          <li>Enter a name in the <strong>Enter Player Name</strong> box and click <strong>Add Player</strong>. The first 10 players fill the <strong>Champions</strong> & <strong>Challengers</strong> teams; subsequent players join the <strong>Waiting Queue</strong>.</li>
+                          <li>Tap <strong>Sign in</strong> and tap your name. New here? Type your name and add yourself; next time it's saved on this device and you can just tap it. The runner can also type a name and click <strong>Add Player</strong>.</li>
+                          <li>The first 10 players fill the <strong>Champions</strong> & <strong>Challengers</strong> teams; everyone after that joins the <strong>Waiting Queue</strong>. After signing in, the app says where you are, like "2 games away".</li>
                           <li>Game results can be recorded once both <strong>Champions</strong> and <strong>Challengers</strong> teams have 5 players each.</li>
                           <li>After a game, click the <strong>Champions Won</strong> or <strong>Challengers Won</strong> buttons at the top of the page.</li>
                           <li>Winners stay, losers queue up, and the next 5 Challengers are filled automatically, with a three-point shootout pop-up appearing when required.</li>
-                          <li>Tapped the wrong button? Click <strong>Undo</strong> to step back one change at a time.</li>
+                          <li>Tapped the wrong button? Click <strong>Undo</strong> to step back one change at a time. It still works after a refresh.</li>
                         </ul>
 
                         <hr className="my-6 border-t border-gray-300" />
@@ -320,7 +371,8 @@ function PickupBasketballApp({ sample, onTrySample }: PickupBasketballAppProps) 
                         <h3 className="text-xl font-bold mb-4">📺 Court View & Recap</h3>
                         <ul className="list-disc pl-6 mb-6">
                           <li><strong>Court View</strong> shows who's playing, the game clock, and who's up next, including any upcoming shootout. Use <strong>Full screen</strong> on a TV or tablet.</li>
-                          <li><strong>Recap</strong> (top menu) shows games played, players tonight, and the longest win streak.</li>
+                          <li><strong>Recap</strong> (top menu) shows games played, players tonight, the longest win streak, and who had the most wins and games. Download a recap image for the group chat or a backup of the night.</li>
+                          <li>At the end of the night, click <strong>Finish night</strong> in Recap. Tonight is saved under <strong>Past nights</strong> on this device and the courts clear for next time.</li>
                         </ul>
 
                         <hr className="my-6 border-t border-gray-300" />
@@ -510,6 +562,17 @@ function PickupBasketballApp({ sample, onTrySample }: PickupBasketballAppProps) 
               <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="13" rx="2" /><path d="M8 21h8M12 17v4" /></svg>
               Court view
             </button>
+            {saveStatus === 'saved' && !isEmpty && (
+              <span className="ml-3 inline-flex items-center gap-1 text-sm text-gray-500" title="Tonight is saved in this browser as you go">
+                <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7" /></svg>
+                Saved
+              </span>
+            )}
+            {saveStatus === 'failed' && (
+              <span className="ml-3 text-sm font-semibold text-red-700" role="status" title="This browser won't let the app save. Tonight still runs but won't survive a refresh.">
+                Not saving on this device
+              </span>
+            )}
           </div>
           <div className="flex gap-4 items-center pointer-events-auto">
             <button
@@ -551,22 +614,53 @@ function PickupBasketballApp({ sample, onTrySample }: PickupBasketballAppProps) 
         <ArrangeBar stickyTop={sample ? 'top-[76px]' : 'top-2'} />
 
         <div className="grid grid-cols-2 gap-6 mb-4">
-          <div className="mb-0">
-            <div className="flex">
+          <div className="mb-0 flex gap-3">
+            <button
+              onClick={() => setSignInOpen(true)}
+              className="shrink-0 inline-flex items-center gap-2 bg-[#E85A00] hover:bg-[#C94E00] text-white px-4 py-2.5 text-lg font-bold rounded-lg transition-colors duration-200"
+              title="Players tap their own name to sign in"
+            >
+              <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="8" r="4" /><path d="M2 21c0-3.9 3.1-7 7-7s7 3.1 7 7M19 8v6M16 11h6" /></svg>
+              Sign in
+            </button>
+            <div className="relative flex flex-1 min-w-0">
               <input
                 type="text"
                 value={newPlayerName}
                 onChange={(e) => setNewPlayerName(e.target.value)}
                 onKeyPress={handleKeyPress}
+                onFocus={() => setInputFocused(true)}
+                onBlur={() => setTimeout(() => setInputFocused(false), 150)}
                 placeholder="Enter player name"
+                aria-label="Enter player name"
                 className="flex-1 min-w-0 px-3 py-2.5 text-lg bg-white border border-[#D5DAE1] rounded-l-lg focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
               />
               <button
                 onClick={handleAddPlayer}
-                className="bg-[#1B2430] hover:bg-black text-white px-5 py-2.5 text-lg font-semibold rounded-r-lg transition-colors duration-200"
+                className="bg-[#1B2430] hover:bg-black text-white px-4 py-2.5 text-lg font-semibold rounded-r-lg transition-colors duration-200 whitespace-nowrap"
               >
                 Add Player
               </button>
+              {inputFocused && suggestions.length > 0 && (
+                <ul className="absolute left-0 right-0 top-full mt-1 z-30 bg-white border border-[#D5DAE1] rounded-lg shadow-lg overflow-hidden" role="listbox" aria-label="Saved names">
+                  {suggestions.map(r => (
+                    <li key={r.id}>
+                      <button
+                        type="button"
+                        role="option"
+                        aria-selected={false}
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => {
+                          try { addPlayer(r.name); setNewPlayerName(''); } catch { setErrorMessage(`"${r.name}" already exists.`); setShowError(true); }
+                        }}
+                        className="w-full text-left px-4 py-2.5 text-lg hover:bg-blue-50"
+                      >
+                        {r.name}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           </div>
           <div className="mb-0">
@@ -621,7 +715,9 @@ function PickupBasketballApp({ sample, onTrySample }: PickupBasketballAppProps) 
 
         <ResumePrompt />
 
-        {recapOpen && <RecapModal onClose={() => setRecapOpen(false)} />}
+        {recapOpen && <RecapModal onClose={() => setRecapOpen(false)} isSample={!!sample} />}
+
+        {signInOpen && <SignInSheet onClose={() => setSignInOpen(false)} isSample={!!sample} />}
 
         {courtViewOpen && <CourtView onClose={() => setCourtViewOpen(false)} isSample={!!sample} />}
         
