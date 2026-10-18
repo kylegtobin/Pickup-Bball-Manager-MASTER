@@ -1,6 +1,6 @@
 import React, { createContext, useState, useContext, useCallback, useEffect, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { Player, PreviousTeam, WaitingQueueItem, GameState, Regular, PlayerRef, GameRecord, NightSummary, SittingOut } from '../types';
+import { Player, PreviousTeam, WaitingQueueItem, GameState, Regular, PlayerRef, GameRecord, NightSummary } from '../types';
 import { useToast } from '../components/ui/Toast'; 
 import { planChallengers } from '../utils/formChallengers';
 import { Side, EndedBy, newScore, newClock, timeLeft, decide } from '../utils/score';
@@ -17,18 +17,15 @@ import {
   hasAvailableWaiter,
   reconcileVacancy,
   canFillDirectly,
-  migrateSitters,
+  clearSitOut,
   ref,
   summarize,
   withBuzzer,
   pausedSnapshot,
   withDefaults,
   everyoneIn,
-  removeFromLine,
-  markSpotFilled,
   reconcileRegulars,
   remapNight,
-  placeReturning,
 } from '../rules/lineup';
 import {
   SAVE_VERSION,
@@ -43,7 +40,7 @@ import {
 } from '../storage/session';
 
 // Re-exported so existing imports keep working
-export { isPreviousTeam, pausedSnapshot, markSpotFilled, reconcileRegulars, remapNight, placeReturning };
+export { isPreviousTeam, pausedSnapshot, reconcileRegulars, remapNight };
 
 // Define the shape of the context value
 export interface GameContextProps {
@@ -101,9 +98,6 @@ export interface GameContextProps {
   resumeFromBackup: (state: GameState) => boolean;
   // Manual mode extras
   swapPlayers: (aId: string, bId: string) => void;
-  sitOut: (playerId: string) => void;
-  bringBack: (playerId: string) => void;
-  sitterLeft: (playerId: string) => void;
 }
 
 
@@ -297,7 +291,7 @@ export function GameProvider({ children, initialState, persistKey, initialRegula
     const everyone = everyoneIn(s);
     const a = everyone.find(p => p.id === aId);
     const b = everyone.find(p => p.id === bId);
-    if (!a || !b || a.away || b.away) return; // someone sitting out can't be swapped onto the court
+    if (!a || !b) return;
     pendingLabelRef.current = `Swapped ${a.name} and ${b.name}`;
     setGameState(prev => {
       const swap = (p: Player) => (p.id === aId ? b : p.id === bId ? a : p);
@@ -310,119 +304,11 @@ export function GameProvider({ children, initialState, persistKey, initialRegula
     });
   }, []);
 
-  // Step off for a bit.
-  // - Waiting in line: they stay put, marked away, so they keep their place and their group.
-  // - On court: their spot opens for someone from the line, and we remember whether it gets filled.
-  const sitOut = useCallback((playerId: string) => {
-    const s = stateRef.current;
-    if (!isStable(s.status) || s.status === 'SHOOTOUT') return;
-    const who = everyoneIn(s).find(p => p.id === playerId);
-    if (!who || who.away) return;
-    pendingLabelRef.current = `${who.name} sat out`;
-    setGameState(prev => {
-      const now = Date.now();
-      const side: Side | null = prev.champions.some(p => p.id === playerId) ? 'champions'
-        : prev.challengers.some(p => p.id === playerId) ? 'challengers' : null;
-      if (!side) {
-        const mark = (p: Player) => (p.id === playerId ? { ...p, away: now } : p);
-        // If they were the last one available to fill an open spot, sign-ins fill it now
-        return reconcileVacancy({ ...prev, waitingQueue: prev.waitingQueue.map(item => (isPreviousTeam(item) ? { ...item, players: item.players.map(mark) } : mark(item))) });
-      }
-      const index = prev[side].findIndex(p => p.id === playerId);
-      const team = prev[side].filter(p => p.id !== playerId);
-      const entry: SittingOut = { player: prev[side][index], at: now, from: side, index, gameNo: prev.games.length, spotFilled: false };
-      const opened: GameState = { ...prev, [side]: team, sittingOut: [...(prev.sittingOut ?? []), entry] };
-      // Someone in line can take the spot; with nobody available, new sign-ins fill it
-      return hasAvailableWaiter(opened)
-        ? { ...opened, manualMode: true, status: 'WAITING_FOR_MANUAL_REPLACEMENT' }
-        : { ...opened, manualMode: prev.status === 'WAITING_FOR_MANUAL_REPLACEMENT' ? false : prev.manualMode, status: 'INITIAL' };
-    });
-  }, []);
-
-  // Back from sitting out.
-  // - Waiting in line: just un-marked, right where they were.
-  // - From court: their own spot if it's the same game and nobody filled it; otherwise the end of the line.
-  const bringBack = useCallback((playerId: string) => {
-    const s = stateRef.current;
-    if (!isStable(s.status) || s.status === 'SHOOTOUT') return;
-    const inLine = everyoneIn(s).find(p => p.id === playerId && p.away);
-    const e = (s.sittingOut ?? []).find(x => x.player.id === playerId);
-    if (!inLine && !e) return;
-    const name = (inLine ?? e!.player).name;
-    pendingLabelRef.current = `${name} is back`;
-    setLastAdded({ id: playerId, name, at: Date.now() });
-    setGameState(prev => {
-      const others = removeFromLine(prev, playerId); // whether anyone else is waiting, not counting them
-      const filling = canFillDirectly(others);
-      const room: Side | null = prev.champions.length < 5 ? 'champions' : prev.challengers.length < 5 ? 'challengers' : null;
-      let next: GameState;
-      if (prev.waitingQueue.some(item => (isPreviousTeam(item) ? item.players.some(p => p.id === playerId) : item.id === playerId))) {
-        const back = (p: Player): Player => { const { away, ...rest } = p; void away; return rest; };
-        if (filling && room) {
-          // The teams are short (people sat out when it was their turn): straight onto the court
-          const me = everyoneIn(prev).find(p => p.id === playerId)!;
-          next = removeFromLine(prev, playerId);
-          next = markSpotFilled({ ...next, [room]: [...prev[room], back(me)] }, room);
-        } else {
-          const unmark = (p: Player) => (p.id === playerId ? back(p) : p);
-          next = { ...prev, waitingQueue: prev.waitingQueue.map(item => (isPreviousTeam(item) ? { ...item, players: item.players.map(unmark) } : unmark(item))) };
-        }
-      } else {
-        const entry = (prev.sittingOut ?? []).find(x => x.player.id === playerId);
-        if (!entry) return prev;
-        next = { ...prev, sittingOut: prev.sittingOut.filter(x => x.player.id !== playerId) };
-        const p = entry.player;
-        const placed = placeReturning(prev, entry);
-        if (placed.where === 'court' && entry.from !== 'line') {
-          next[entry.from] = [...prev[entry.from].slice(0, entry.index), p, ...prev[entry.from].slice(entry.index)];
-        } else if (filling && room) {
-          next = markSpotFilled({ ...next, [room]: [...prev[room], p] }, room);
-        } else if (placed.where === 'group') {
-          next.waitingQueue = prev.waitingQueue.map(item => (isPreviousTeam(item) && item.id === placed.groupId ? { ...item, players: [...item.players, p] } : item));
-        } else if (placed.where === 'before') {
-          const at = prev.waitingQueue.findIndex(item => item.id === placed.beforeId);
-          next.waitingQueue = [...prev.waitingQueue.slice(0, at), p, ...prev.waitingQueue.slice(at)];
-        } else {
-          next.waitingQueue = [...prev.waitingQueue, p];
-        }
-      }
-      if (next.champions.length === 5 && next.challengers.length === 5) {
-        if (prev.status === 'WAITING_FOR_MANUAL_REPLACEMENT') next.status = 'READY';
-        if (filling) {
-          next.status = 'READY';
-          if (!prev.gameStartTime) {
-            next.gameStartTime = Date.now();
-            next.elapsedMinutes = 0;
-            setTimeout(runGameTimer, 0);
-          }
-        }
-      }
-      return reconcileVacancy(next);
-    });
-  }, [runGameTimer]);
-
-  // Sitting out and gone home
-  const sitterLeft = useCallback((playerId: string) => {
-    const s = stateRef.current;
-    const who = everyoneIn(s).find(p => p.id === playerId && p.away) ?? (s.sittingOut ?? []).find(x => x.player.id === playerId)?.player;
-    if (!who) return;
-    pendingLabelRef.current = `${who.name} left`;
-    setGameState(prev => reconcileVacancy({ ...removeFromLine(prev, playerId), sittingOut: (prev.sittingOut ?? []).filter(x => x.player.id !== playerId) }));
-  }, []);
-
   // Add Player
   const addPlayer = useCallback((name: string) => {
     const trimmedName = name.trim();
     if (!trimmedName) {
       showNotification("Name cannot be empty.", 'error');
-      return;
-    }
-
-    // Signing in again while sitting out just brings them back
-    const sitter = [...everyoneIn(gameState).filter(p => p.away), ...(gameState.sittingOut ?? []).map(e => e.player)]
-      .find(p => p.name.toLowerCase() === trimmedName.toLowerCase());
-    if (sitter) {
-      bringBack(sitter.id);
       return;
     }
 
@@ -468,10 +354,8 @@ export function GameProvider({ children, initialState, persistKey, initialRegula
       if (canFillDirectly(prev)) {
         if (prev.champions.length < 5) {
           updatedState.champions = [...prev.champions, newPlayer];
-          Object.assign(updatedState, markSpotFilled(updatedState, 'champions'));
         } else if (prev.challengers.length < 5) {
           updatedState.challengers = [...prev.challengers, newPlayer];
-          Object.assign(updatedState, markSpotFilled(updatedState, 'challengers'));
         } else {
           updatedState.waitingQueue = [...prev.waitingQueue, newPlayer];
         }
@@ -495,7 +379,7 @@ export function GameProvider({ children, initialState, persistKey, initialRegula
 
       return reconcileVacancy(updatedState);
     });
-  }, [gameState, regulars, showNotification, runGameTimer, bringBack]);
+  }, [gameState, regulars, showNotification, runGameTimer]);
 
   const forgetRegular = useCallback((id: string) => {
     setRegulars(list => list.filter(r => r.id !== id));
@@ -854,7 +738,6 @@ export function GameProvider({ children, initialState, persistKey, initialRegula
         console.error('Player not found for moving to team:', playerId);
         return prev;
       }
-      if (playerToMove.away) return prev; // sitting out: Back first
 
       // Check team capacity
       const targetTeamPlayers = targetTeam === 'champions' ? prev.champions : prev.challengers;
@@ -906,8 +789,7 @@ export function GameProvider({ children, initialState, persistKey, initialRegula
         }
       }
 
-      // Whoever sat out from this team doesn't get this spot back
-      return markSpotFilled(newState, targetTeam);
+      return newState;
     });
   }, []);
 
@@ -1064,7 +946,7 @@ export function GameProvider({ children, initialState, persistKey, initialRegula
       setGameState(prev => ({
         ...prev,
         challengers: plan.picked, // These are the players we've collected before the shootout
-        waitingQueue: [team, ...plan.rest, ...plan.passed], // Shooting group first; anyone whose turn passed while sitting out goes last
+        waitingQueue: [team, ...plan.rest], // Shooting group first
         shootoutTeam: team,
         requiredPlayers: spots,
         showShootoutModal: true,
@@ -1079,7 +961,7 @@ export function GameProvider({ children, initialState, persistKey, initialRegula
     setGameState(prev => ({
       ...prev,
       challengers: plan.picked,
-      waitingQueue: [...plan.rest, ...plan.passed],
+      waitingQueue: plan.rest,
       status: plan.picked.length === 5 ? 'READY' : 'WAITING_FOR_PLAYERS',
     }));
     // Runs only when the status or line changes; reading the rest of gameState here is intentional
@@ -1567,7 +1449,7 @@ export function GameProvider({ children, initialState, persistKey, initialRegula
   // Pick a backed-up night back up, only when no night is in progress, so it can't overwrite one
   const resumeFromBackup = useCallback((state: GameState): boolean => {
     if (hasNight(stateRef.current) || savedSession) return false;
-    const merged = migrateSitters(withDefaults(state));
+    const merged = clearSitOut(withDefaults(state));
     if (!isStable(merged.status) || merged.status === 'SHOOTOUT') {
       merged.status = merged.champions.length === 5 && merged.challengers.length === 5 ? 'READY' : 'WAITING_FOR_PLAYERS';
       merged.shootoutTeam = null;
@@ -1584,7 +1466,6 @@ export function GameProvider({ children, initialState, persistKey, initialRegula
     merged.champions = merged.champions.map(fix);
     merged.challengers = merged.challengers.map(fix);
     merged.waitingQueue = merged.waitingQueue.map(item => (isPreviousTeam(item) ? { ...item, players: item.players.map(fix) } : fix(item)));
-    merged.sittingOut = (merged.sittingOut ?? []).map(e => ({ ...e, player: fix(e.player) }));
     merged.games = remapNight({ games: merged.games } as NightSummary, map).games;
     restoringRef.current = true;
     historyRef.current = [];
@@ -1636,9 +1517,6 @@ export function GameProvider({ children, initialState, persistKey, initialRegula
     restoreNight,
     resumeFromBackup,
     swapPlayers,
-    sitOut,
-    bringBack,
-    sitterLeft,
   };
 
   return (

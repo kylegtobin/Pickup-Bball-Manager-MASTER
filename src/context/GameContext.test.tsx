@@ -2,7 +2,7 @@ import React from 'react';
 import { renderHook, act } from '@testing-library/react';
 import { GameProvider, useGame, isPreviousTeam } from './GameContext';
 import { ToastProvider } from '../components/ui/Toast';
-import { GameState, Player, Regular } from '../types';
+import { GameState, Player, PreviousTeam, Regular } from '../types';
 
 const KEY = 'test-session';
 const NAMES = ['Avery', 'Blake', 'Cody', 'Drew', 'Ezra', 'Finn', 'Gabe', 'Hank', 'Ivan', 'Jules', 'Kai', 'Leo', 'Max', 'Nico', 'Owen', 'Pat', 'Quin'];
@@ -569,7 +569,7 @@ describe('restoring backups', () => {
   });
 });
 
-describe('swap, sit out, back in', () => {
+describe('swap and open spots', () => {
   const idOf = (s: GameState, name: string) =>
     [...s.champions, ...s.challengers, ...s.waitingQueue.flatMap(i => (isPreviousTeam(i) ? i.players : [i]))].find(p => p.name === name)!.id;
 
@@ -592,42 +592,20 @@ describe('swap, sit out, back in', () => {
     unmount();
   });
 
-  test('sitting out from the court opens a spot; back fills it if still open, otherwise end of the line', () => {
+  test('removing a court player opens a spot for someone in line; with nobody waiting, sign-ins fill it', () => {
     const { result, unmount } = setup();
-    signIn(result, NAMES.slice(0, 12));
-    act(() => { result.current.sitOut(idOf(result.current.gameState, 'Cody')); });
+    signIn(result, NAMES.slice(0, 11)); // Kai waiting
+    act(() => { result.current.removePlayer('Cody'); });
     let s = result.current.gameState;
     expect(s.champions.length).toBe(4);
     expect(s.status).toBe('WAITING_FOR_MANUAL_REPLACEMENT');
     expect(s.manualMode).toBe(true);
-    // Back before anyone filled it: right back on Champions
-    act(() => { result.current.bringBack(s.sittingOut[0].player.id); });
-    s = result.current.gameState;
-    expect(names(s.champions)).toEqual(NAMES.slice(0, 5));
-    expect(s.status).toBe('READY');
-    // Sit out again, Kai fills the spot, then back goes to the end of the line
-    act(() => { result.current.sitOut(idOf(result.current.gameState, 'Cody')); });
     act(() => { result.current.addPlayerToTeam(idOf(result.current.gameState, 'Kai'), 'champions'); });
-    act(() => { result.current.bringBack(result.current.gameState.sittingOut[0].player.id); });
+    act(() => { result.current.removePlayer('Drew'); }); // nobody waiting now
+    act(() => { result.current.addPlayer('Cody'); }); // back again: just a new sign-in
     s = result.current.gameState;
-    expect(names(s.champions)).toContain('Kai');
-    expect(lineNames(s)).toEqual(['Leo', 'Cody']);
-    unmount();
-  });
-
-  test('with nobody waiting, a court sit-out lets new sign-ins fill the spot, and signing in again brings them back', () => {
-    const { result, unmount } = setup();
-    signIn(result, NAMES.slice(0, 10));
-    act(() => { result.current.sitOut(idOf(result.current.gameState, 'Gabe')); });
-    let s = result.current.gameState;
-    expect(s.manualMode).toBe(false);
-    expect(s.challengers.length).toBe(4);
-    // Typing their name again brings them back rather than making a duplicate
-    act(() => { result.current.addPlayer('gabe'); });
-    s = result.current.gameState;
-    expect(names(s.challengers)).toEqual(NAMES.slice(5, 10));
-    expect(s.sittingOut).toEqual([]);
-    expect(s.status).toBe('READY');
+    expect(names(s.champions)).toContain('Cody');
+    expect(s.champions.length).toBe(5);
     unmount();
   });
 
@@ -681,23 +659,6 @@ describe('live review fixes', () => {
     second.unmount();
   });
 
-  test('back never fills someone else\'s open spot after the teams rotate', () => {
-    const { result, unmount } = setup();
-    signIn(result, NAMES.slice(0, 16)); // six waiting, so no shootout after Kai moves up
-    act(() => { result.current.sitOut(idOf(result.current.gameState, 'Cody')); });
-    act(() => { result.current.addPlayerToTeam(idOf(result.current.gameState, 'Kai'), 'champions'); });
-    act(() => { result.current.toggleManualMode(); });
-    win(result, 'champions');
-    expect(result.current.gameState.status).toBe('READY');
-    act(() => { result.current.sitOut(idOf(result.current.gameState, 'Drew')); }); // a new vacancy on Champions
-    const cody = result.current.gameState.sittingOut.find(e => e.player.name === 'Cody')!;
-    act(() => { result.current.bringBack(cody.player.id); });
-    const s = result.current.gameState;
-    expect(names(s.champions)).not.toContain('Cody');
-    expect(lineNames(s)[lineNames(s).length - 1]).toBe('Cody');
-    unmount();
-  });
-
   test('during a shootout nobody can be removed, and picks must still be in the shooting group', () => {
     const { result, unmount } = setup();
     signIn(result, NAMES.slice(0, 12));
@@ -728,128 +689,7 @@ describe('live review fixes', () => {
   });
 });
 
-describe('sitting out, second pass (Astra)', () => {
-  const all = (s: GameState) => [...s.champions, ...s.challengers, ...s.waitingQueue.flatMap(i => (isPreviousTeam(i) ? i.players : [i]))];
-  const idOf = (s: GameState, name: string) => all(s).find(p => p.name === name)!.id;
-  const awayNames = (s: GameState) => all(s).filter(p => p.away).map(p => p.name);
-  const sit = (r: Hook, n: string) => act(() => { r.current.sitOut(idOf(r.current.gameState, n)); });
-  const back = (r: Hook, n: string) => act(() => {
-    const s = r.current.gameState;
-    const p = [...all(s), ...s.sittingOut.map(e => e.player)].find(x => x.name === n)!;
-    r.current.bringBack(p.id);
-  });
-
-  test('sitting out in line keeps their exact place, and Back just brings them back', () => {
-    const { result, unmount } = setup();
-    signIn(result, NAMES.slice(0, 13)); // Kai, Leo, Max waiting
-    sit(result, 'Leo');
-    expect(lineNames(result.current.gameState)).toEqual(['Kai', 'Leo', 'Max']);
-    expect(awayNames(result.current.gameState)).toEqual(['Leo']);
-    back(result, 'Leo');
-    expect(awayNames(result.current.gameState)).toEqual([]);
-    expect(lineNames(result.current.gameState)).toEqual(['Kai', 'Leo', 'Max']);
-    unmount();
-  });
-
-  test('two water breaks never scramble the line', () => {
-    const { result, unmount } = setup();
-    signIn(result, NAMES.slice(0, 14)); // Kai, Leo, Max, Nico
-    sit(result, 'Kai'); sit(result, 'Leo'); back(result, 'Kai'); back(result, 'Leo');
-    expect(lineNames(result.current.gameState)).toEqual(['Kai', 'Leo', 'Max', 'Nico']);
-    unmount();
-  });
-
-  test('someone away when their turn comes is skipped and goes to the end of the line', () => {
-    const { result, unmount } = setup();
-    signIn(result, NAMES.slice(0, 16)); // Kai, Leo, Max, Nico, Owen, Pat
-    sit(result, 'Leo');
-    win(result, 'champions');
-    const s = result.current.gameState;
-    expect(names(s.challengers)).toEqual(['Kai', 'Max', 'Nico', 'Owen', 'Pat']);
-    expect(lineNames(s)[lineNames(s).length - 1]).toBe('Leo');
-    expect(awayNames(s)).toEqual(['Leo']);
-    unmount();
-  });
-
-  test('a whole group sitting out and coming back still shoots for the spots', () => {
-    const pl = (n: string): Player => ({ id: n, name: n, rid: n });
-    const { result, unmount } = setup({ initialState: {
-      champions: NAMES.slice(0, 5).map(pl), challengers: NAMES.slice(5, 10).map(pl),
-      waitingQueue: [pl('Kai'), pl('Leo'), { type: 'PreviousTeam', id: 'grp', players: ['Max', 'Nico', 'Owen', 'Pat', 'Quin'].map(pl) }],
-      status: 'READY', gameStartTime: Date.now(), playersTonight: NAMES.slice(0, 17),
-    } });
-    ['Max', 'Nico', 'Owen', 'Pat', 'Quin'].forEach(n => sit(result, n));
-    ['Max', 'Nico', 'Owen', 'Pat', 'Quin'].forEach(n => back(result, n));
-    win(result, 'champions');
-    const s = result.current.gameState;
-    expect(s.status).toBe('SHOOTOUT');
-    expect(s.requiredPlayers).toBe(3);
-    expect(s.shootoutTeam!.players.map(p => p.name)).toEqual(['Max', 'Nico', 'Owen', 'Pat', 'Quin']);
-    unmount();
-  });
-
-  test('group members away when the group is called miss its turn; the rest still play', () => {
-    const pl = (n: string): Player => ({ id: n, name: n, rid: n });
-    const { result, unmount } = setup({ initialState: {
-      champions: NAMES.slice(0, 5).map(pl), challengers: NAMES.slice(5, 10).map(pl),
-      waitingQueue: [pl('Kai'), pl('Leo'), { type: 'PreviousTeam', id: 'grp', players: ['Max', 'Nico', 'Owen', 'Pat', 'Quin'].map(pl) }],
-      status: 'READY', gameStartTime: Date.now(), playersTonight: NAMES.slice(0, 17),
-    } });
-    sit(result, 'Pat'); sit(result, 'Quin');
-    win(result, 'champions');
-    const s = result.current.gameState;
-    expect(names(s.challengers)).toEqual(['Kai', 'Leo', 'Max', 'Nico', 'Owen']); // 3 present fit the 3 spots
-    expect(awayNames(s).sort()).toEqual(['Pat', 'Quin']);
-    unmount();
-  });
-  test('a court spot someone else filled is not yours to come back to, even if they sit out too', () => {
-    const { result, unmount } = setup();
-    signIn(result, NAMES.slice(0, 15));
-    sit(result, 'Avery');
-    act(() => { result.current.addPlayerToTeam(idOf(result.current.gameState, 'Kai'), 'champions'); });
-    sit(result, 'Kai');
-    back(result, 'Avery');
-    let s = result.current.gameState;
-    expect(names(s.champions)).not.toContain('Avery');
-    expect(lineNames(s)[lineNames(s).length - 1]).toBe('Avery');
-    back(result, 'Kai'); // Kai's own spot was never filled
-    s = result.current.gameState;
-    expect(names(s.champions)).toContain('Kai');
-    unmount();
-  });
-
-  test('two teammates who sit out both get their untouched spots back', () => {
-    const { result, unmount } = setup();
-    signIn(result, NAMES.slice(0, 12));
-    sit(result, 'Avery'); sit(result, 'Blake');
-    back(result, 'Avery'); back(result, 'Blake');
-    const s = result.current.gameState;
-    expect(names(s.champions).sort()).toEqual(['Avery', 'Blake', 'Cody', 'Drew', 'Ezra']);
-    expect(s.status).toBe('READY');
-    unmount();
-  });
-
-  test('left takes someone sitting out off the line; they stay in tonight\'s list', () => {
-    const { result, unmount } = setup();
-    signIn(result, NAMES.slice(0, 11));
-    sit(result, 'Kai');
-    act(() => { result.current.sitterLeft(idOf(result.current.gameState, 'Kai')); });
-    expect(lineNames(result.current.gameState)).toEqual([]);
-    expect(result.current.gameState.playersTonight).toContain('Kai');
-    expect(result.current.undoLabel).toBe('Kai left');
-    unmount();
-  });
-
-  test('someone sitting out in line can be brought back by signing in again', () => {
-    const { result, unmount } = setup();
-    signIn(result, NAMES.slice(0, 12));
-    sit(result, 'Leo');
-    act(() => { result.current.addPlayer('leo'); });
-    expect(awayNames(result.current.gameState)).toEqual([]);
-    expect(lineNames(result.current.gameState)).toEqual(['Kai', 'Leo']);
-    unmount();
-  });
-
+describe('restoring a night', () => {
   test('a restored night keeps one identity for people who already went home', () => {
     const { result, unmount } = setup();
     const state = {
@@ -876,20 +716,14 @@ describe('sitting out, second pass (Astra)', () => {
   });
 });
 
-describe('sitting out, third pass (Astra)', () => {
+describe('open spots and older saves', () => {
   const all = (s: GameState) => [...s.champions, ...s.challengers, ...s.waitingQueue.flatMap(i => (isPreviousTeam(i) ? i.players : [i]))];
   const idOf = (s: GameState, name: string) => all(s).find(p => p.name === name)!.id;
-  const sit = (r: Hook, n: string) => act(() => { r.current.sitOut(idOf(r.current.gameState, n)); });
-  const back = (r: Hook, n: string) => act(() => {
-    const s = r.current.gameState;
-    const p = [...all(s), ...s.sittingOut.map(e => e.player)].find(x => x.name === n)!;
-    r.current.bringBack(p.id);
-  });
 
-  test('removing a court player never lets a newcomer skip people waiting', () => {
+  test('removing court players never lets a newcomer skip people waiting', () => {
     const { result, unmount } = setup();
     signIn(result, NAMES.slice(0, 12)); // Kai, Leo waiting
-    sit(result, 'Avery'); sit(result, 'Blake');
+    act(() => { result.current.removePlayer('Avery'); });
     act(() => { result.current.removePlayer('Cody'); });
     act(() => { result.current.addPlayer('Zed'); });
     const s = result.current.gameState;
@@ -899,11 +733,11 @@ describe('sitting out, third pass (Astra)', () => {
     unmount();
   });
 
-  test('when the last person available in line sits out, sign-ins fill the open spot', () => {
+  test('when nobody is left in line, sign-ins fill the open spot', () => {
     const { result, unmount } = setup();
     signIn(result, NAMES.slice(0, 11)); // Kai waiting
-    sit(result, 'Avery'); // Kai could fill it
-    sit(result, 'Kai'); // now nobody available
+    act(() => { result.current.removePlayer('Avery'); });
+    act(() => { result.current.removePlayer('Kai'); });
     act(() => { result.current.addPlayer('Zed'); });
     const s = result.current.gameState;
     expect(names(s.champions)).toContain('Zed');
@@ -911,44 +745,40 @@ describe('sitting out, third pass (Astra)', () => {
     unmount();
   });
 
-  test('an older save with someone sitting out can\'t claim back a spot whose history is unknown', () => {
+  test('a save from before sit out was removed: everyone sitting out goes to the end of the line', () => {
     const first = setup({ persistKey: KEY });
-    signIn(first.result, NAMES.slice(0, 12));
+    signIn(first.result, NAMES.slice(0, 13)); // Kai, Leo, Max waiting
     first.unmount();
-    // Rewrite the save the way the Oct 17 version stored a court sit-out (no game number, no filled flag)
     const saved = JSON.parse(window.localStorage.getItem(KEY)!);
     const avery = saved.state.champions[0];
     saved.state.champions = saved.state.champions.slice(1);
-    saved.state.sittingOut = [{ player: avery, at: Date.now(), from: 'champions', index: 0 }];
+    saved.state.sittingOut = [{ player: avery, at: 1, from: 'champions', index: 0, gameNo: 0, spotFilled: false }];
+    saved.state.waitingQueue[0] = { ...saved.state.waitingQueue[0], away: 5 }; // Kai sitting out in line
     saved.state.status = 'WAITING_FOR_MANUAL_REPLACEMENT';
     saved.state.manualMode = true;
     window.localStorage.setItem(KEY, JSON.stringify(saved));
     const second = setup({ persistKey: KEY });
     act(() => { second.result.current.resumeSession(); });
-    act(() => { second.result.current.addPlayerToTeam(idOf(second.result.current.gameState, 'Kai'), 'champions'); });
-    sit(second.result, 'Kai');
-    back(second.result, 'Avery');
     const s = second.result.current.gameState;
-    expect(names(s.champions)).not.toContain('Avery');
-    expect(lineNames(s)).toContain('Avery');
+    expect(lineNames(s)).toEqual(['Leo', 'Max', 'Kai', 'Avery']);
+    expect(all(s).some(p => p.away)).toBe(false);
+    expect(s.sittingOut).toEqual([]);
     second.unmount();
   });
 
-  test('an older save with someone sitting out in line puts them back in line, still sitting out', () => {
+  test('an older save with a group member sitting out: they leave the group for the end of the line', () => {
+    const pl = (n: string): Player => ({ id: n, name: n, rid: n });
     const first = setup({ persistKey: KEY });
-    signIn(first.result, NAMES.slice(0, 13));
+    signIn(first.result, NAMES.slice(0, 10));
     first.unmount();
     const saved = JSON.parse(window.localStorage.getItem(KEY)!);
-    const leo = saved.state.waitingQueue[1];
-    saved.state.waitingQueue = saved.state.waitingQueue.filter((x: Player) => x.id !== leo.id);
-    saved.state.sittingOut = [{ player: leo, at: 123, from: 'line', index: 1 }];
+    saved.state.waitingQueue = [pl('Kai'), { type: 'PreviousTeam', id: 'grp', players: [pl('Max'), { ...pl('Nico'), away: 9 }, pl('Owen')] }];
     window.localStorage.setItem(KEY, JSON.stringify(saved));
     const second = setup({ persistKey: KEY });
     act(() => { second.result.current.resumeSession(); });
     const s = second.result.current.gameState;
-    expect(lineNames(s)).toEqual(['Kai', 'Max', 'Leo']);
-    expect(all(s).find(p => p.name === 'Leo')!.away).toBe(123);
-    expect(s.sittingOut).toEqual([]);
+    expect(lineNames(s)).toEqual(['Kai', '[Max,Owen]', 'Nico']);
+    expect((s.waitingQueue[1] as PreviousTeam).players.map(p => p.name)).toEqual(['Max', 'Owen']);
     second.unmount();
   });
 });
@@ -956,28 +786,10 @@ describe('sitting out, third pass (Astra)', () => {
 describe('open spots follow the lineup, not an old status (Astra 4th)', () => {
   const all = (s: GameState) => [...s.champions, ...s.challengers, ...s.waitingQueue.flatMap(i => (isPreviousTeam(i) ? i.players : [i]))];
   const idOf = (s: GameState, name: string) => all(s).find(p => p.name === name)!.id;
-  const sit = (r: Hook, n: string) => act(() => { r.current.sitOut(idOf(r.current.gameState, n)); });
-
-  test('moving a court player into line ahead of someone sitting out: that person\'s Back can\'t skip them', () => {
-    const { result, unmount } = setup();
-    signIn(result, NAMES.slice(0, 11)); // Kai waiting
-    sit(result, 'Avery'); // Kai available
-    sit(result, 'Kai'); // nobody available now
-    if (!result.current.gameState.manualMode) act(() => { result.current.toggleManualMode(); });
-    act(() => { result.current.movePlayer(idOf(result.current.gameState, 'Blake'), 0); }); // Blake to the front of the line
-    expect(lineNames(result.current.gameState)).toEqual(['Blake', 'Kai']);
-    act(() => { result.current.bringBack(idOf(result.current.gameState, 'Kai')); });
-    const s = result.current.gameState;
-    expect(names(s.champions)).not.toContain('Kai');
-    expect(lineNames(s)).toEqual(['Blake', 'Kai']);
-    expect(s.status).toBe('WAITING_FOR_MANUAL_REPLACEMENT');
-    unmount();
-  });
-
   test('after the only person waiting fills one of two open spots, the next sign-in fills the other', () => {
     const { result, unmount } = setup();
     signIn(result, NAMES.slice(0, 11)); // Kai waiting
-    sit(result, 'Avery'); sit(result, 'Blake');
+    act(() => { result.current.removePlayer('Avery'); }); act(() => { result.current.removePlayer('Blake'); });
     act(() => { result.current.addPlayerToTeam(idOf(result.current.gameState, 'Kai'), 'champions'); });
     act(() => { result.current.addPlayer('Lark'); });
     const s = result.current.gameState;
@@ -990,7 +802,7 @@ describe('open spots follow the lineup, not an old status (Astra 4th)', () => {
   test('undoing back to an open spot settles it by the lineup', () => {
     const { result, unmount } = setup();
     signIn(result, NAMES.slice(0, 12)); // Kai, Leo waiting
-    sit(result, 'Avery');
+    act(() => { result.current.removePlayer('Avery'); });
     act(() => { result.current.addPlayerToTeam(idOf(result.current.gameState, 'Kai'), 'champions'); });
     act(() => { result.current.undo(); }); // back to Avery's open spot, Kai and Leo waiting
     act(() => { result.current.addPlayer('Zed'); });
