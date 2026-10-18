@@ -1,10 +1,12 @@
 import React from 'react';
 import { useGame } from '../context/GameContext';
-import { Player } from '../types';
+import { Player, GameRecord } from '../types';
 import { previewNextUp } from '../utils/formChallengers';
 import { decide, timeLeft, clockState, formatClock as formatCountdown, endedByText } from '../utils/score';
 import { useDialogFocus } from '../utils/useDialogFocus';
 import { useWakeLock } from '../utils/useWakeLock';
+import { openTvWindow, tvSupported } from '../utils/tvLink';
+import { soundPref, setSoundPref, unlockSound, playHorn, playWin } from '../utils/sound';
 
 const formatClock = (ms: number) => {
   const total = Math.max(0, Math.floor(ms / 1000));
@@ -40,7 +42,7 @@ const TeamColumn: React.FC<{ label: string; players: Player[]; accent: string; s
     accent={accent}
     score={score}
     detail={streak !== undefined && streak >= 2 ? (
-      <span className="whitespace-nowrap rounded-full bg-[#E85A00] text-white px-3 py-0.5 text-[clamp(0.85rem,1.2vw,1.15rem)] font-bold">{streak} straight wins</span>
+      <span className={`whitespace-nowrap rounded-full bg-[#E85A00] text-white px-3 py-0.5 text-[clamp(0.85rem,1.2vw,1.15rem)] font-bold ${streak >= 3 ? 'pbm-heater' : ''}`}>{streak >= 3 ? `On a heater · ${streak} straight` : `${streak} straight wins`}</span>
     ) : null}
   >
     {players.map(p => <NameRow key={p.id}>{p.name}</NameRow>)}
@@ -100,15 +102,97 @@ const NextUpColumn: React.FC<{ gameOn: boolean; lineEmpty: boolean; next: Return
   );
 };
 
+const CONFETTI_COLORS = ['#FF7A1A', '#F5B301', '#7FA7FF', '#FFFFFF', '#22C55E'];
+
+// A few seconds of fanfare after a result: who won, the score, and a streak if there is one
+const Celebration: React.FC<{ game: GameRecord; streak: number; onDone: () => void }> = ({ game, streak, onDone }) => {
+  const pieces = React.useMemo(() => Array.from({ length: 48 }, (_, i) => ({
+    left: (i * 37) % 100,
+    delay: ((i * 53) % 20) / 10,
+    duration: 2.6 + ((i * 29) % 15) / 10,
+    color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
+    tilt: (i * 47) % 360,
+  })), []);
+  const champs = game.winner === 'champions';
+  const accent = champs ? '#FF7A1A' : '#7FA7FF';
+  const score = game.final ? `${Math.max(game.final.champions, game.final.challengers)}–${Math.min(game.final.champions, game.final.challengers)}` : null;
+  const how = endedByText(game.endedBy);
+  return (
+    <div className="absolute inset-0 z-20 overflow-hidden flex items-center justify-center bg-[#0E1A33] cursor-pointer" onClick={onDone} role="status" aria-live="assertive">
+      {pieces.map((c, i) => (
+        <span key={i} className="pbm-confetti" style={{ left: `${c.left}%`, backgroundColor: c.color, animationDelay: `${c.delay}s`, animationDuration: `${c.duration}s`, transform: `rotate(${c.tilt}deg)` }} />
+      ))}
+      <div className="pbm-pop relative text-center px-6">
+        <p className="uppercase tracking-[0.3em] font-bold text-[clamp(1rem,1.8vw,1.75rem)] text-white/70">Game {game.n}{how ? ` · ${how}` : ''}</p>
+        <h2 className="mt-2 font-black leading-none text-[clamp(3.5rem,10vw,10rem)]" style={{ color: accent }}>{champs ? 'Champions' : 'Challengers'} win</h2>
+        {score && <p className="mt-3 font-black tabular-nums text-white text-[clamp(3rem,7vw,7rem)] leading-none">{score}</p>}
+        <p className="mt-6 font-bold text-white/90 text-[clamp(1.25rem,2.4vw,2.5rem)]">{game.winners.map(p => p.name).join(' · ')}</p>
+        {streak >= 2 && (
+          <p className="mt-6 inline-block rounded-full bg-[#E85A00] text-white px-6 py-2 font-extrabold text-[clamp(1.25rem,2.4vw,2.5rem)]">{streak} straight wins</p>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// While the runner picks shootout winners, the TV makes it an event
+const ShootoutSpotlight: React.FC<{ spots: number; shooters: Player[]; alreadyIn: number }> = ({ spots, shooters, alreadyIn }) => (
+  <div className="absolute inset-0 z-10 flex flex-col items-center justify-center text-center gap-[clamp(1rem,3vh,2.5rem)] px-8 bg-[#0E1A33] bg-[radial-gradient(ellipse_at_center,_rgba(245,179,1,0.16),_transparent_65%)]">
+    <p className="uppercase tracking-[0.35em] font-bold text-[#F5B301] text-[clamp(1rem,1.8vw,1.75rem)]">3-point shootout</p>
+    <h2 className="pbm-pop font-black leading-none text-white text-[clamp(3rem,8vw,8rem)]">{spots} {spots === 1 ? 'spot' : 'spots'} up for grabs</h2>
+    <div className="flex flex-wrap justify-center gap-[clamp(0.5rem,1vw,1rem)] max-w-6xl">
+      {shooters.map(p => <ShooterChip key={p.id} name={p.name} />)}
+    </div>
+    <p className="text-white/70 font-semibold text-[clamp(1.1rem,2vw,2rem)]">
+      Make it and you're in the next game{alreadyIn > 0 ? ` with ${alreadyIn} already in` : ''}.
+    </p>
+  </div>
+);
+
 // Full-screen view for the court: who's playing, the game clock, and who's next (including a likely shootout).
-const CourtView: React.FC<{ onClose: () => void; isSample?: boolean }> = ({ onClose, isSample }) => {
+// viewer: this is the second-screen window. It shows the same thing but only follows the main screen.
+const CourtView: React.FC<{ onClose: () => void; isSample?: boolean; viewer?: boolean; link?: 'waiting' | 'live' | 'lost' }> = ({ onClose, isSample, viewer, link }) => {
   const { gameState, addPoints, startClock, pauseClock, handleGameEnd, undo, canUndo, undoLabel } = useGame();
   const [fixing, setFixing] = React.useState(false);
   const [recording, setRecording] = React.useState(false);
   const rootRef = React.useRef<HTMLDivElement>(null);
-  useDialogFocus(rootRef);
+  useDialogFocus(rootRef, !viewer);
   useWakeLock(true); // a TV or tablet showing court view shouldn't go to sleep
   React.useEffect(() => { setFixing(false); setRecording(false); }, [gameState.games.length]);
+
+  // Sound is off unless turned on for this screen
+  const [sound, setSound] = React.useState(soundPref);
+  const toggleSound = () => { unlockSound(); setSound(on => { setSoundPref(!on); return !on; }); };
+
+  // A fresh result gets its moment. Only a result from the last minute counts, so opening
+  // the second screen mid-night doesn't celebrate old games.
+  const games = gameState.games;
+  const seenGames = React.useRef(games.length);
+  const [party, setParty] = React.useState<GameRecord | null>(null);
+  React.useEffect(() => {
+    const last = games[games.length - 1];
+    if (games.length === seenGames.current + 1 && last && Date.now() - last.endedAt < 60000) {
+      setParty(last);
+      if (sound) playWin();
+    }
+    seenGames.current = games.length;
+  }, [games, sound]);
+  React.useEffect(() => {
+    if (!party) return;
+    const id = setTimeout(() => setParty(null), 6500);
+    return () => clearTimeout(id);
+  }, [party]);
+
+  // On the second screen the buttons fade away until the mouse moves
+  const [chrome, setChrome] = React.useState(true);
+  React.useEffect(() => {
+    if (!viewer) return;
+    let id: ReturnType<typeof setTimeout> = setTimeout(() => setChrome(false), 4000);
+    const wake = () => { setChrome(true); clearTimeout(id); id = setTimeout(() => setChrome(false), 4000); };
+    window.addEventListener('mousemove', wake);
+    window.addEventListener('touchstart', wake);
+    return () => { clearTimeout(id); window.removeEventListener('mousemove', wake); window.removeEventListener('touchstart', wake); };
+  }, [viewer]);
   const { champions, challengers, waitingQueue, gameStartTime, championStreak, score, clock } = gameState;
   const [controls, setControls] = React.useState(false);
   const [now, setNow] = React.useState(Date.now());
@@ -124,10 +208,11 @@ const CourtView: React.FC<{ onClose: () => void; isSample?: boolean }> = ({ onCl
   }, [onClose]);
 
   React.useEffect(() => {
+    if (viewer) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !document.fullscreenElement) close(); };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [close]);
+  }, [close, viewer]);
 
   const goFullScreen = () => {
     try { document.documentElement.requestFullscreen?.(); } catch { /* not allowed here */ }
@@ -145,14 +230,27 @@ const CourtView: React.FC<{ onClose: () => void; isSample?: boolean }> = ({ onCl
   const next = previewNextUp(waitingQueue);
   const lineEmpty = waitingQueue.length === 0;
 
+  // Horn when time runs out
+  const lastClockState = React.useRef(cState);
+  React.useEffect(() => {
+    if (lastClockState.current === 'running' && cState === 'time' && sound) playHorn();
+    lastClockState.current = cState;
+  }, [cState, sound]);
+
+  const shootout = gameState.status === 'SHOOTOUT' && gameState.shootoutTeam ? gameState.shootoutTeam : null;
+
   return (
-    <div ref={rootRef} tabIndex={-1} className="fixed inset-0 z-[65] bg-[#0E1A33] text-white overflow-auto outline-none" role="dialog" aria-modal="true" aria-label="Court view">
+    <div ref={rootRef} tabIndex={-1} className="fixed inset-0 z-[65] bg-[#0E1A33] text-white overflow-auto outline-none" role={viewer ? 'main' : 'dialog'} aria-modal={viewer ? undefined : true} aria-label="Court view">
+      {party && <Celebration game={party} streak={gameState.championStreak} onDone={() => setParty(null)} />}
+      {!party && shootout && <ShootoutSpotlight spots={gameState.requiredPlayers} shooters={shootout.players} alreadyIn={challengers.length} />}
       <div className="h-full min-h-[32rem] flex flex-col gap-[clamp(1rem,2.5vh,2rem)] px-[clamp(1rem,3vw,3rem)] py-[clamp(1rem,3vh,2.5rem)]">
         {/* Top row */}
         <div className="flex items-center gap-4">
           <div className="flex items-baseline gap-4 flex-1 min-w-0">
             <h1 className="text-[clamp(1.25rem,2vw,2rem)] font-extrabold text-white/90">Now playing</h1>
             {isSample && <span className="rounded-full bg-[#F5B301] text-[#14213D] px-3 py-1 text-sm font-bold">Sample with made-up players</span>}
+            {viewer && link === 'waiting' && <span className="rounded-full bg-white/15 px-3 py-1 text-sm font-bold">Connecting to the main screen…</span>}
+            {viewer && link === 'lost' && <span role="alert" className="rounded-full bg-red-500 px-3 py-1 text-sm font-bold">Lost the main screen. Keep the app open there.</span>}
           </div>
           {scoring ? (
             <div className="text-right">
@@ -169,14 +267,22 @@ const CourtView: React.FC<{ onClose: () => void; isSample?: boolean }> = ({ onCl
               </div>
             </div>
           )}
-          <div className="flex gap-2 ml-4">
-            {gameOn && (
+          <div className={`flex gap-2 ml-4 transition-opacity duration-500 ${viewer && !chrome ? 'opacity-0 pointer-events-none' : ''}`}>
+            {!viewer && tvSupported() && (
+              <button onClick={() => openTvWindow()} className="rounded-lg border border-white/30 px-4 py-2 font-semibold hover:bg-white/10" title="Open court view in its own window for a TV. It follows this screen.">
+                Second screen
+              </button>
+            )}
+            <button onClick={toggleSound} aria-pressed={sound} className="rounded-lg border border-white/30 px-4 py-2 font-semibold hover:bg-white/10" title="Horn at 0:00 and a chime for each win, on this screen only">
+              {sound ? 'Sound on' : 'Sound off'}
+            </button>
+            {gameOn && !viewer && (
               <button onClick={() => setControls(c => !c)} className="rounded-lg border border-white/30 px-4 py-2 font-semibold hover:bg-white/10" aria-pressed={controls}>
                 {controls ? 'Hide score buttons' : 'Score'}
               </button>
             )}
             <button onClick={goFullScreen} className="rounded-lg border border-white/30 px-4 py-2 font-semibold hover:bg-white/10">Full screen</button>
-            <button onClick={close} className="rounded-lg bg-white text-[#0E1A33] px-4 py-2 font-bold hover:bg-white/90">Exit</button>
+            {!viewer && <button onClick={close} className="rounded-lg bg-white text-[#0E1A33] px-4 py-2 font-bold hover:bg-white/90">Exit</button>}
           </div>
         </div>
 
@@ -193,7 +299,7 @@ const CourtView: React.FC<{ onClose: () => void; isSample?: boolean }> = ({ onCl
         </div>
 
         {/* Optional score buttons, lined up under each team, so the runner never has to leave court view */}
-        {controls && gameOn && (() => {
+        {controls && gameOn && !viewer && (() => {
           const decided = !!outcome.winner;
           const off = decided && !fixing;
           const teamButtons = (side: 'champions' | 'challengers', color: string) => (

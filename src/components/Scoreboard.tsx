@@ -26,7 +26,7 @@ const TEAM = {
 } as const;
 
 // Simple scorekeeping for the runner: +1 / +2 per team, a 12:00 clock, and the house rules.
-const Scoreboard: React.FC<{ stickyTop: string }> = ({ stickyTop }) => {
+const Scoreboard: React.FC<{ stickyTop: string; active?: boolean }> = ({ stickyTop, active = true }) => {
   const { gameState, addPoints, startClock, pauseClock, adjustClock, handleGameEnd } = useGame();
   const { score, clock, champions, challengers, status } = gameState;
   const gameOn = champions.length === 5 && challengers.length === 5 && status !== 'SHOOTOUT';
@@ -51,16 +51,17 @@ const Scoreboard: React.FC<{ stickyTop: string }> = ({ stickyTop }) => {
   const showPopup = gameOn && !!decidedKey && !fixing && dismissed !== decidedKey && !recording;
   const popupRef = React.useRef<HTMLDivElement>(null);
   useDialogFocus(popupRef, showPopup);
-  useWakeLock(gameOn && state === 'running');
+  useWakeLock(active && gameOn && state === 'running');
 
   // Runner shortcuts on a laptop: Q/W score for the Champions, O/P for the Challengers, Space starts or pauses
-  const live = React.useRef({ gameOn, state, decided: !!outcome.winner, fixing });
-  live.current = { gameOn, state, decided: !!outcome.winner, fixing };
+  const live = React.useRef({ gameOn, state, decided: !!outcome.winner, fixing, active });
+  live.current = { gameOn, state, decided: !!outcome.winner, fixing, active };
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey || !keysFree()) return;
-      const { gameOn: on, state: st, decided: dec, fixing: fix } = live.current;
-      if (!on) return;
+      const { gameOn: on, state: st, decided: dec, fixing: fix, active: act } = live.current;
+      // The real night stays mounted (hidden) behind an open sample: its keys must stay quiet
+      if (!on || !act) return;
       const k = e.key.toLowerCase();
       const map: Record<string, [Side, number]> = { q: ['champions', 1], w: ['champions', 2], o: ['challengers', 1], p: ['challengers', 2] };
       if (map[k]) { e.preventDefault(); addPoints(map[k][0], map[k][1], fix); return; }
