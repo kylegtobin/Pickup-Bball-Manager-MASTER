@@ -103,6 +103,13 @@ const PhonePanel: React.FC<{ cloud: CloudController; onClose: () => void }> = ({
               <p className="text-xl font-extrabold">{cloud.run.name}</p>
               {cloud.run.gym && <p className="text-gray-600">{cloud.run.gym}</p>}
             </div>
+            {cloud.run.code && (
+              <div>
+                <p className="text-sm font-semibold text-gray-500">Code</p>
+                <p className="text-4xl font-black tracking-[0.25em] leading-tight" aria-label={`Code ${cloud.run.code.split('').join(' ')}`}>{cloud.run.code}</p>
+                <p className="text-sm text-gray-600">Players type it at {window.location.host} on their phone.</p>
+              </div>
+            )}
             <div>
               <p className="text-sm font-semibold text-gray-500">Phone link</p>
               <p className="font-mono text-sm break-all select-all">{link}</p>
@@ -116,7 +123,7 @@ const PhonePanel: React.FC<{ cloud: CloudController; onClose: () => void }> = ({
             )}
           </div>
         </div>
-        <p className="text-sm text-gray-600">Anyone with this link or code sees the line, the score and the stats (names only). Reset the link to cut off old ones.</p>
+        <p className="text-sm text-gray-600">Anyone with this link, QR or code sees the line, the score and the stats (names only). Reset the link to make a new link and code and cut off the old ones.</p>
         <div className="flex flex-wrap gap-2 border-t border-gray-200 pt-4">
           {confirmReset ? (
             <>
