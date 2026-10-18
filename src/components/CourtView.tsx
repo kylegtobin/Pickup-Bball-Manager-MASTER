@@ -5,7 +5,7 @@ import { previewNextUp } from '../utils/formChallengers';
 import { decide, timeLeft, clockState, formatClock as formatCountdown, endedByText } from '../utils/score';
 import { useDialogFocus } from '../utils/useDialogFocus';
 import { useWakeLock } from '../utils/useWakeLock';
-import { openTvWindow, tvSupported } from '../utils/tvLink';
+import { openTvWindow, tvSupported, TV_BLOCKED_MESSAGE } from '../utils/tvLink';
 import { soundPref, setSoundPref, unlockSound, playHorn, playWin } from '../utils/sound';
 
 const formatClock = (ms: number) => {
@@ -59,8 +59,10 @@ const SpanBlock: React.FC<{ rows: number; children: React.ReactNode }> = ({ rows
   </li>
 );
 
-const ShooterChip: React.FC<{ name: string }> = ({ name }) => (
-  <span className="inline-flex items-center rounded-lg bg-[#F5B301] text-[#14213D] px-[clamp(0.5rem,0.9vw,1rem)] py-[clamp(0.25rem,0.7vh,0.55rem)] text-[clamp(1.15rem,min(2vw,4vh),2.4rem)] font-extrabold leading-none">{name}</span>
+const ShooterChip: React.FC<{ name: string; big?: boolean }> = ({ name, big }) => (
+  <span className={`inline-flex items-center rounded-lg bg-[#F5B301] text-[#14213D] font-extrabold leading-none ${big
+    ? 'px-[clamp(0.75rem,1.4vw,1.5rem)] py-[clamp(0.4rem,1vh,0.8rem)] text-[clamp(1.75rem,min(3.4vw,7vh),4.75rem)]'
+    : 'px-[clamp(0.5rem,0.9vw,1rem)] py-[clamp(0.25rem,0.7vh,0.55rem)] text-[clamp(1.15rem,min(2vw,4vh),2.4rem)]'}`}>{name}</span>
 );
 
 const NextUpColumn: React.FC<{ gameOn: boolean; lineEmpty: boolean; next: ReturnType<typeof previewNextUp> }> = ({ gameOn, lineEmpty, next }) => {
@@ -139,9 +141,9 @@ const Celebration: React.FC<{ game: GameRecord; streak: number; onDone: () => vo
 const ShootoutSpotlight: React.FC<{ spots: number; shooters: Player[]; alreadyIn: number }> = ({ spots, shooters, alreadyIn }) => (
   <div className="absolute inset-0 z-10 flex flex-col items-center justify-center text-center gap-[clamp(1rem,3vh,2.5rem)] px-8 bg-[#0E1A33] bg-[radial-gradient(ellipse_at_center,_rgba(245,179,1,0.16),_transparent_65%)]">
     <p className="uppercase tracking-[0.35em] font-bold text-[#F5B301] text-[clamp(1rem,1.8vw,1.75rem)]">3-point shootout</p>
-    <h2 className="pbm-pop font-black leading-none text-white text-[clamp(3rem,8vw,8rem)]">{spots} {spots === 1 ? 'spot' : 'spots'} up for grabs</h2>
-    <div className="flex flex-wrap justify-center gap-[clamp(0.5rem,1vw,1rem)] max-w-6xl">
-      {shooters.map(p => <ShooterChip key={p.id} name={p.name} />)}
+    <h2 className="pbm-pop font-black leading-none text-white text-[clamp(2.5rem,6vw,6rem)]">{spots} {spots === 1 ? 'spot' : 'spots'} up for grabs</h2>
+    <div className="flex flex-wrap justify-center gap-[clamp(0.6rem,1.2vw,1.25rem)] max-w-[90vw]">
+      {shooters.map(p => <ShooterChip key={p.id} name={p.name} big />)}
     </div>
     <p className="text-white/70 font-semibold text-[clamp(1.1rem,2vw,2rem)]">
       Make it and you're in the next game{alreadyIn > 0 ? ` with ${alreadyIn} already in` : ''}.
@@ -151,7 +153,7 @@ const ShootoutSpotlight: React.FC<{ spots: number; shooters: Player[]; alreadyIn
 
 // Full-screen view for the court: who's playing, the game clock, and who's next (including a likely shootout).
 // viewer: this is the second-screen window. It shows the same thing but only follows the main screen.
-const CourtView: React.FC<{ onClose: () => void; isSample?: boolean; viewer?: boolean; link?: 'waiting' | 'live' | 'lost' }> = ({ onClose, isSample, viewer, link }) => {
+const CourtView: React.FC<{ onClose: () => void; isSample?: boolean; viewer?: boolean; link?: 'waiting' | 'live' | 'lost' | 'unlinked' }> = ({ onClose, isSample, viewer, link }) => {
   const { gameState, addPoints, startClock, pauseClock, handleGameEnd, undo, canUndo, undoLabel } = useGame();
   const [fixing, setFixing] = React.useState(false);
   const [recording, setRecording] = React.useState(false);
@@ -160,9 +162,13 @@ const CourtView: React.FC<{ onClose: () => void; isSample?: boolean; viewer?: bo
   useWakeLock(true); // a TV or tablet showing court view shouldn't go to sleep
   React.useEffect(() => { setFixing(false); setRecording(false); }, [gameState.games.length]);
 
+  const [tvBlocked, setTvBlocked] = React.useState(false);
+
   // Sound is off unless turned on for this screen
-  const [sound, setSound] = React.useState(soundPref);
-  const toggleSound = () => { unlockSound(); setSound(on => { setSoundPref(!on); return !on; }); };
+  // Each screen keeps its own settings: court view on the laptop and the second-screen window differ
+  const screen = viewer ? '-tv' : '';
+  const [sound, setSound] = React.useState(() => soundPref(screen));
+  const toggleSound = () => { unlockSound(); setSound(on => { setSoundPref(!on, screen); return !on; }); };
 
   // A fresh result gets its moment. Only a result from the last minute counts, so opening
   // the second screen mid-night doesn't celebrate old games.
@@ -182,6 +188,15 @@ const CourtView: React.FC<{ onClose: () => void; isSample?: boolean; viewer?: bo
     const id = setTimeout(() => setParty(null), 6500);
     return () => clearTimeout(id);
   }, [party]);
+  // Undo took the result back: stop celebrating it
+  React.useEffect(() => {
+    if (party && !games.some(g => (party.id ? g.id === party.id : g.n === party.n && g.endedAt === party.endedAt))) setParty(null);
+  }, [games, party]);
+
+  // Which team shows on the left, for a TV that faces the court the other way (this screen only)
+  const flipKey = `pbm-court-flip${screen}`;
+  const [flipped, setFlipped] = React.useState(() => { try { return window.localStorage.getItem(flipKey) === '1'; } catch { return false; } });
+  const flip = () => setFlipped(f => { try { window.localStorage.setItem(flipKey, f ? '0' : '1'); } catch { /* blocked */ } return !f; });
 
   // On the second screen the buttons fade away until the mouse moves
   const [chrome, setChrome] = React.useState(true);
@@ -239,18 +254,40 @@ const CourtView: React.FC<{ onClose: () => void; isSample?: boolean; viewer?: bo
 
   const shootout = gameState.status === 'SHOOTOUT' && gameState.shootoutTeam ? gameState.shootoutTeam : null;
 
+  // A winning basket disables the score buttons, so hand focus to Record result
+  const recordRef = React.useRef<HTMLButtonElement>(null);
+  const decidedNow = !!outcome.winner && !fixing && controls;
+  React.useEffect(() => {
+    if (!decidedNow || viewer) return;
+    const id = setTimeout(() => recordRef.current?.focus(), 0);
+    return () => clearTimeout(id);
+  }, [decidedNow, viewer]);
+
   return (
     <div ref={rootRef} tabIndex={-1} className="fixed inset-0 z-[65] bg-[#0E1A33] text-white overflow-auto outline-none" role={viewer ? 'main' : 'dialog'} aria-modal={viewer ? undefined : true} aria-label="Court view">
+      {viewer && link !== 'live' && (
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-30" role={link === 'lost' ? 'alert' : 'status'}>
+          <span className={`rounded-full px-4 py-1.5 text-sm font-bold shadow-lg ${link === 'lost' || link === 'unlinked' ? 'bg-red-500 text-white' : 'bg-white/90 text-[#0E1A33]'}`}>
+            {link === 'lost' ? 'Lost the main screen. Keep the app open there, or press Second screen on it again.'
+              : link === 'unlinked' ? 'Open this from the Second screen button on the main screen.'
+              : 'Connecting to the main screen…'}
+          </span>
+        </div>
+      )}
+      {tvBlocked && (
+        <div role="alert" className="absolute top-3 left-1/2 -translate-x-1/2 z-30 max-w-xl w-[90%] rounded-xl bg-red-500 text-white px-4 py-3 shadow-lg flex items-start gap-3">
+          <p className="flex-1 text-sm font-semibold">{TV_BLOCKED_MESSAGE}</p>
+          <button onClick={() => setTvBlocked(false)} className="shrink-0 rounded-md bg-white/20 px-2 py-1 text-sm font-bold hover:bg-white/30">OK</button>
+        </div>
+      )}
       {party && <Celebration game={party} streak={gameState.championStreak} onDone={() => setParty(null)} />}
       {!party && shootout && <ShootoutSpotlight spots={gameState.requiredPlayers} shooters={shootout.players} alreadyIn={challengers.length} />}
       <div className="h-full min-h-[32rem] flex flex-col gap-[clamp(1rem,2.5vh,2rem)] px-[clamp(1rem,3vw,3rem)] py-[clamp(1rem,3vh,2.5rem)]">
         {/* Top row */}
-        <div className="flex items-center gap-4">
-          <div className="flex items-baseline gap-4 flex-1 min-w-0">
-            <h1 className="text-[clamp(1.25rem,2vw,2rem)] font-extrabold text-white/90">Now playing</h1>
-            {isSample && <span className="rounded-full bg-[#F5B301] text-[#14213D] px-3 py-1 text-sm font-bold">Sample with made-up players</span>}
-            {viewer && link === 'waiting' && <span className="rounded-full bg-white/15 px-3 py-1 text-sm font-bold">Connecting to the main screen…</span>}
-            {viewer && link === 'lost' && <span role="alert" className="rounded-full bg-red-500 px-3 py-1 text-sm font-bold">Lost the main screen. Keep the app open there.</span>}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <div className="flex items-baseline gap-4 flex-auto">
+            <h1 className="whitespace-nowrap text-[clamp(1.25rem,2vw,2rem)] font-extrabold text-white/90">Now playing</h1>
+            {isSample && <span className="whitespace-nowrap rounded-full bg-[#F5B301] text-[#14213D] px-3 py-1 text-sm font-bold" title="Sample with made-up players">Sample<span className="hidden xl:inline"> with made-up players</span></span>}
           </div>
           {scoring ? (
             <div className="text-right">
@@ -267,28 +304,31 @@ const CourtView: React.FC<{ onClose: () => void; isSample?: boolean; viewer?: bo
               </div>
             </div>
           )}
-          <div className={`flex gap-2 ml-4 transition-opacity duration-500 ${viewer && !chrome ? 'opacity-0 pointer-events-none' : ''}`}>
+          <div className={`flex flex-wrap justify-end gap-2 ml-auto transition-opacity duration-500 ${viewer && !chrome ? 'opacity-0 pointer-events-none' : ''}`}>
             {!viewer && tvSupported() && (
-              <button onClick={() => openTvWindow()} className="rounded-lg border border-white/30 px-4 py-2 font-semibold hover:bg-white/10" title="Open court view in its own window for a TV. It follows this screen.">
+              <button onClick={() => setTvBlocked(!openTvWindow())} className="whitespace-nowrap rounded-lg border border-white/30 px-3 xl:px-4 py-2 text-sm xl:text-base font-semibold hover:bg-white/10" title="Open court view in its own window for a TV. It follows this screen.">
                 Second screen
               </button>
             )}
-            <button onClick={toggleSound} aria-pressed={sound} className="rounded-lg border border-white/30 px-4 py-2 font-semibold hover:bg-white/10" title="Horn at 0:00 and a chime for each win, on this screen only">
+            <button onClick={flip} aria-pressed={flipped} className="whitespace-nowrap rounded-lg border border-white/30 px-3 xl:px-4 py-2 text-sm xl:text-base font-semibold hover:bg-white/10" title="Show the Challengers on the left, to match how this screen faces the court">
+              Swap sides
+            </button>
+            <button onClick={toggleSound} aria-pressed={sound} className="whitespace-nowrap rounded-lg border border-white/30 px-3 xl:px-4 py-2 text-sm xl:text-base font-semibold hover:bg-white/10" title="Horn at 0:00 and a chime for each win, on this screen only">
               {sound ? 'Sound on' : 'Sound off'}
             </button>
             {gameOn && !viewer && (
-              <button onClick={() => setControls(c => !c)} className="rounded-lg border border-white/30 px-4 py-2 font-semibold hover:bg-white/10" aria-pressed={controls}>
-                {controls ? 'Hide score buttons' : 'Score'}
+              <button onClick={() => setControls(c => !c)} className="whitespace-nowrap rounded-lg border border-white/30 px-3 xl:px-4 py-2 text-sm xl:text-base font-semibold hover:bg-white/10" aria-pressed={controls}>
+                {controls ? 'Hide score' : 'Score'}
               </button>
             )}
-            <button onClick={goFullScreen} className="rounded-lg border border-white/30 px-4 py-2 font-semibold hover:bg-white/10">Full screen</button>
-            {!viewer && <button onClick={close} className="rounded-lg bg-white text-[#0E1A33] px-4 py-2 font-bold hover:bg-white/90">Exit</button>}
+            <button onClick={goFullScreen} className="whitespace-nowrap rounded-lg border border-white/30 px-3 xl:px-4 py-2 text-sm xl:text-base font-semibold hover:bg-white/10">Full screen</button>
+            {!viewer && <button onClick={close} className="rounded-lg bg-white text-[#0E1A33] px-3 xl:px-4 py-2 text-sm xl:text-base font-bold hover:bg-white/90">Exit</button>}
           </div>
         </div>
 
         <div className="flex-1 flex gap-[clamp(1rem,2vw,2rem)] items-stretch min-h-0">
         {/* Teams */}
-        <div className="flex-[2] flex gap-[clamp(0.75rem,1.5vw,1.5rem)] items-stretch min-w-0">
+        <div className={`flex-[2] flex gap-[clamp(0.75rem,1.5vw,1.5rem)] items-stretch min-w-0 ${flipped ? 'flex-row-reverse' : ''}`}>
           <TeamColumn label="Champions" players={champions} accent="#FF7A1A" streak={championStreak} score={scoring ? score.champions : null} />
           <div className="self-center text-[clamp(1rem,2vw,2rem)] font-black text-white/40">vs</div>
           <TeamColumn label="Challengers" players={challengers} accent="#7FA7FF" score={scoring ? score.challengers : null} />
@@ -315,7 +355,7 @@ const CourtView: React.FC<{ onClose: () => void; isSample?: boolean; viewer?: bo
           const winnerName = outcome.winner === 'champions' ? 'Champions' : 'Challengers';
           return (
             <div className="flex gap-[clamp(1rem,2vw,2rem)] items-center rounded-xl bg-white/[0.06] py-3">
-              <div className="flex-[2] flex gap-[clamp(0.75rem,1.5vw,1.5rem)] items-center min-w-0">
+              <div className={`flex-[2] flex gap-[clamp(0.75rem,1.5vw,1.5rem)] items-center min-w-0 ${flipped ? 'flex-row-reverse' : ''}`}>
                 {teamButtons('champions', '#E85A00')}
                 <div className="invisible text-[clamp(1rem,2vw,2rem)] font-black" aria-hidden="true">vs</div>
                 {teamButtons('challengers', '#1E3A8A')}
@@ -325,6 +365,7 @@ const CourtView: React.FC<{ onClose: () => void; isSample?: boolean; viewer?: bo
                   <>
                     <span className="w-full text-center font-extrabold">{winnerName} win {Math.max(score.champions, score.challengers)}–{Math.min(score.champions, score.challengers)} <span className="text-white/60 font-semibold">· {endedByText(outcome.endedBy)}</span></span>
                     <button
+                      ref={recordRef}
                       onClick={() => { if (!recording && outcome.winner) { setRecording(true); handleGameEnd(outcome.winner, outcome.endedBy ?? 'points'); } }}
                       disabled={recording}
                       className="px-4 h-12 rounded-lg bg-[#F5B301] text-[#0E1A33] font-extrabold disabled:opacity-50"

@@ -3,13 +3,10 @@ import { useGame } from '../context/GameContext';
 import { decide, timeLeft, clockState, formatClock, endedByText, Side } from '../utils/score';
 import { useDialogFocus } from '../utils/useDialogFocus';
 import { useWakeLock } from '../utils/useWakeLock';
+import { blockingDialogOpen, typing } from '../utils/visibility';
 
 // Typing in a box, or another dialog open (court view excepted), means keys aren't for the scoreboard
-const keysFree = () => {
-  const a = document.activeElement as HTMLElement | null;
-  if (a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.tagName === 'SELECT' || a.isContentEditable)) return false;
-  return !document.querySelector('[aria-modal="true"]:not([aria-label="Court view"])');
-};
+const keysFree = () => !typing() && !blockingDialogOpen();
 
 const useTick = (on: boolean) => {
   const [, setN] = React.useState(0);
@@ -26,7 +23,8 @@ const TEAM = {
 } as const;
 
 // Simple scorekeeping for the runner: +1 / +2 per team, a 12:00 clock, and the house rules.
-const Scoreboard: React.FC<{ stickyTop: string; active?: boolean }> = ({ stickyTop, active = true }) => {
+// quietPopup: court view is open and handles the game-over choice itself
+const Scoreboard: React.FC<{ stickyTop: string; active?: boolean; quietPopup?: boolean }> = ({ stickyTop, active = true, quietPopup = false }) => {
   const { gameState, addPoints, startClock, pauseClock, adjustClock, handleGameEnd } = useGame();
   const { score, clock, champions, challengers, status } = gameState;
   const gameOn = champions.length === 5 && challengers.length === 5 && status !== 'SHOOTOUT';
@@ -48,7 +46,7 @@ const Scoreboard: React.FC<{ stickyTop: string; active?: boolean }> = ({ stickyT
   React.useEffect(() => { if (!decidedKey) setDismissed(null); }, [decidedKey]);
 
   // The pop-up waits while the runner is fixing the score
-  const showPopup = gameOn && !!decidedKey && !fixing && dismissed !== decidedKey && !recording;
+  const showPopup = active && !quietPopup && gameOn && !!decidedKey && !fixing && dismissed !== decidedKey && !recording;
   const popupRef = React.useRef<HTMLDivElement>(null);
   useDialogFocus(popupRef, showPopup);
   useWakeLock(active && gameOn && state === 'running');
@@ -58,7 +56,10 @@ const Scoreboard: React.FC<{ stickyTop: string; active?: boolean }> = ({ stickyT
   live.current = { gameOn, state, decided: !!outcome.winner, fixing, active };
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.metaKey || e.ctrlKey || e.altKey || !keysFree()) return;
+      if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || !keysFree()) return;
+      // Space on a focused button or player row belongs to that control, not the clock
+      const target = e.target as HTMLElement | null;
+      if (e.code === 'Space' && target?.closest?.('button, a, [role="button"], [role="switch"], input, select, textarea')) return;
       const { gameOn: on, state: st, decided: dec, fixing: fix, active: act } = live.current;
       // The real night stays mounted (hidden) behind an open sample: its keys must stay quiet
       if (!on || !act) return;
