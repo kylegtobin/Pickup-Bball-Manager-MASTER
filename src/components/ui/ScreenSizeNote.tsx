@@ -1,4 +1,5 @@
 import React from 'react';
+import { readCloudSwitch, runnerOnThisPhone, setRunnerOnThisPhone } from '../../cloud/config';
 
 // The app is built for a laptop or tablet at the court. On narrow screens we show
 // a one-line heads-up. It sits in the normal page flow (no overlay), can be
@@ -31,6 +32,14 @@ const ScreenSizeNote: React.FC = () => {
       <div className="flex items-start gap-3 px-4 py-3">
         <p className="flex-1 text-sm leading-snug">
           Pickup Basketball Manager is built for a laptop or tablet at the court. For the best view, open it on a bigger screen.
+          {readCloudSwitch() && runnerOnThisPhone() && (
+            <>
+              {' '}
+              <button className="underline font-semibold" onClick={() => { setRunnerOnThisPhone(false); window.location.assign(window.location.pathname); }}>
+                Just following the run?
+              </button>
+            </>
+          )}
         </p>
         <button
           onClick={() => setDismissed(true)}
