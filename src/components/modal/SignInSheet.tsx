@@ -41,7 +41,7 @@ const SignInSheet: React.FC<{ onClose: () => void; isSample?: boolean }> = ({ on
       ...gameState.champions,
       ...gameState.challengers,
       ...gameState.waitingQueue.flatMap(item => (isPreviousTeam(item) ? item.players : [item])),
-    ].filter(p => !p.away).map(p => (p.rid ?? p.name).toLowerCase()) // someone sitting out can tap their name to come back
+    ].map(p => (p.rid ?? p.name).toLowerCase())
   );
   const notHere = regulars
     .filter(r => !here.has(r.id.toLowerCase()) && !here.has(r.name.toLowerCase()))
@@ -60,7 +60,7 @@ const SignInSheet: React.FC<{ onClose: () => void; isSample?: boolean }> = ({ on
       inputRef.current?.focus();
     } catch {
       shownFor.current = null;
-      setError(`${name} is already signed in. Add a last initial if it's someone else.`);
+      setError(`${name} is already signed in. Two of you? Add a letter, like Mike Sm., or use your full name.`);
     }
   };
 
@@ -117,8 +117,8 @@ const SignInSheet: React.FC<{ onClose: () => void; isSample?: boolean }> = ({ on
           ) : (
             <p className="mt-3 text-base text-gray-500">
               {q && shown.length > 0 && !exact ? `Press Enter for ${shown[0].name}, or tap a name.` : regulars.length === 0
-                ? 'No saved names yet. Type your name to add yourself. Next time you can just tap it.'
-                : 'Tap your name. New here? Type your name and add yourself.'}
+                ? 'No saved names yet. Type your first name and last initial, like Mike S. Next time you can just tap it.'
+                : 'Tap your name. New here? Type your first name and last initial, like Mike S.'}
             </p>
           )}
         </div>
