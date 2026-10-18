@@ -276,7 +276,7 @@ const WaitingQueue: React.FC = () => {
                 role={manualMode ? 'button' : undefined}
                 tabIndex={manualMode ? 0 : undefined}
                 aria-pressed={manualMode ? selectedPlayerId === item.id : undefined}
-                title={manualMode && courtPicked && !item.away ? `Swap with ${item.name}` : undefined}
+                title={manualMode && courtPicked ? `Swap with ${item.name}` : undefined}
                 onKeyDown={manualMode ? activateOnKey(() => tapLinePlayer(item.id)) : undefined}
                 onClick={manualMode ? () => tapLinePlayer(item.id) : undefined}
                 draggable={manualMode}
@@ -286,7 +286,7 @@ const WaitingQueue: React.FC = () => {
                 onDrop={(e) => handleDrop(e, index)}
                 onContextMenu={(e) => handleContextMenu(e, item)}
               >
-                <span className={item.away ? 'text-gray-400' : ''}>{item.name}</span>{item.away && <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-sm font-semibold text-amber-800">sitting out</span>}
+                <span>{item.name}</span>
               </div>
             )}
 

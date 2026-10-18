@@ -188,7 +188,7 @@ const PreviousTeam: React.FC<PreviousTeamProps> = ({
             onDragStart={(e) => handlePlayerDragStart(e, player, playerIndex)}
             onContextMenu={(e) => handlePlayerContextMenu(e, player)}
           >
-            <span className={player.away ? 'text-gray-400' : ''}>{player.name}</span>{player.away && <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-sm font-semibold text-amber-800">sitting out</span>}
+            <span>{player.name}</span>
           </div>
         ))}
         {/* Show drop zone if team is not full AND manual mode is on */}
