@@ -7,7 +7,7 @@ import { GameState } from '../types';
 
 export type TvMessage =
   | { type: 'pbm-tv-hello' }
-  | { type: 'pbm-tv-state'; state: GameState; sample: boolean; sentAt: number };
+  | { type: 'pbm-tv-state'; state: GameState; sample: boolean; sentAt: number; phoneCode?: string | null };
 
 export const isTvLink = () => {
   try { return new URLSearchParams(window.location.search).has('tv'); } catch { return false; }
@@ -40,13 +40,13 @@ const post = (w: Window, msg: TvMessage) => {
 
 // The main screen answers each hello from a TV window it opened and sends what's on court whenever it changes.
 // Only the screen in front of the runner (the real night, or the sample while it's open) answers and sends.
-export const useTvBroadcast = (state: GameState, sample: boolean, active: boolean) => {
-  const latest = React.useRef({ state, sample });
-  latest.current = { state, sample };
+export const useTvBroadcast = (state: GameState, sample: boolean, active: boolean, phoneCode: string | null = null) => {
+  const latest = React.useRef({ state, sample, phoneCode });
+  latest.current = { state, sample, phoneCode };
 
   React.useEffect(() => {
     if (!active) return;
-    const msg = (): TvMessage => ({ type: 'pbm-tv-state', state: latest.current.state, sample: latest.current.sample, sentAt: Date.now() });
+    const msg = (): TvMessage => ({ type: 'pbm-tv-state', state: latest.current.state, sample: latest.current.sample, sentAt: Date.now(), phoneCode: latest.current.phoneCode });
     const onMessage = (e: MessageEvent) => {
       if (e.origin !== window.location.origin || (e.data as TvMessage | undefined)?.type !== 'pbm-tv-hello' || !e.source) return;
       const w = e.source as Window;
@@ -60,6 +60,6 @@ export const useTvBroadcast = (state: GameState, sample: boolean, active: boolea
 
   React.useEffect(() => {
     if (!active) return;
-    viewers.forEach(w => (w.closed ? viewers.delete(w) : post(w, { type: 'pbm-tv-state', state, sample, sentAt: Date.now() })));
-  }, [state, sample, active]);
+    viewers.forEach(w => (w.closed ? viewers.delete(w) : post(w, { type: 'pbm-tv-state', state, sample, sentAt: Date.now(), phoneCode })));
+  }, [state, sample, active, phoneCode]);
 };
