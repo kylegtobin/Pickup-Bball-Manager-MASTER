@@ -4,7 +4,7 @@ export interface Player {
   id: string;
   name: string;
   rid?: string; // Stable id of this player across nights (a saved regular on this device)
-  away?: number; // Sitting out while waiting in line (when they sat down). They keep their place.
+  away?: number; // Legacy: sit out was removed Oct 18, 2026. Old saves are cleaned on load (clearSitOut).
 }
 
 // A saved regular: someone who has signed in on this device before
@@ -115,7 +115,7 @@ export interface GameState {
   playersTonight: string[]; // Everyone who signed in tonight, even if they left
   games: GameRecord[]; // Every finished game tonight, in order
   nightId: string | null; // Stable id for tonight, set at the first sign-in
-  sittingOut: SittingOut[]; // Here tonight but off the court and out of the line for now
+  sittingOut: SittingOut[]; // Legacy, always empty now (sit out was removed Oct 18, 2026)
   // Scoreboard for the game being played
   score: Score;
   clock: Clock;
