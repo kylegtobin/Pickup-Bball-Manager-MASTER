@@ -26,13 +26,18 @@ const PreviousTeam: React.FC<PreviousTeamProps> = ({
   manualMode,
   isDragOver
 }) => {
-  const { gameState, movePlayerIntoGroup, selectedPlayerId, setSelectedPlayerId } = useGame();
+  const { gameState, movePlayerIntoGroup, swapPlayers, selectedPlayerId, setSelectedPlayerId } = useGame();
   const selection = findSelection(gameState, selectedPlayerId);
   const groupSelected = selectedPlayerId === team.id;
   // A picked-up player from anywhere else can join this group if it has room
   const canJoin = selection?.kind === 'player' && selection.groupId !== team.id && team.players.length < 5;
 
-  const toggleSelect = (id: string) => setSelectedPlayerId(selectedPlayerId === id ? null : id);
+  // A player picked up from the court swaps with whoever is tapped here
+  const courtPicked = selection?.kind === 'player' && (selection.where === 'champions' || selection.where === 'challengers');
+  const toggleSelect = (id: string) => {
+    if (courtPicked && selection?.kind === 'player') { swapPlayers(selection.player.id, id); setSelectedPlayerId(null); return; }
+    setSelectedPlayerId(selectedPlayerId === id ? null : id);
+  };
   const handleJoinTap = () => {
     if (!canJoin || selection?.kind !== 'player') return;
     movePlayerIntoGroup(selection.player.id, team.id);

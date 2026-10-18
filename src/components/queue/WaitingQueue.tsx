@@ -10,7 +10,7 @@ import { WaitTimeIndicator, GamesBehindIndicator } from './WaitTimeIndicators';
 import { findSelection, dropSpotClass, selectedClass } from '../../utils/selection';
 
 const WaitingQueue: React.FC = () => {
-  const { gameState, removePlayer, movePlayer, moveTeam, selectedPlayerId, setSelectedPlayerId } = useGame();
+  const { gameState, removePlayer, movePlayer, moveTeam, swapPlayers, selectedPlayerId, setSelectedPlayerId } = useGame();
   const { waitingQueue, manualMode, champions, challengers, elapsedMinutes } = gameState;
   const queueRef = useRef<HTMLDivElement>(null);
   const [contextMenu, setContextMenu] = useState<{ position: { x: number; y: number }; options: { label: string; action: () => void }[] } | null>(null);
@@ -158,6 +158,8 @@ const WaitingQueue: React.FC = () => {
     ? waitingQueue.findIndex(item =>
         selection.kind === 'group' ? item.id === selection.group.id : selection.where === 'line' && item.id === selection.player.id)
     : -1;
+  // A player picked up from the court swaps with whoever is tapped in line
+  const courtPicked = selection?.kind === 'player' && (selection.where === 'champions' || selection.where === 'challengers');
   const isNoOpSpot = (zoneIndex: number) => pickedIndex !== -1 && (zoneIndex === pickedIndex || zoneIndex === pickedIndex + 1);
 
   const dropZone = (zoneIndex: number, extraClass = '') => (
@@ -257,7 +259,11 @@ const WaitingQueue: React.FC = () => {
                 data-player-id={item.id}
                 role={manualMode ? 'button' : undefined}
                 aria-pressed={manualMode ? selectedPlayerId === item.id : undefined}
-                onClick={manualMode ? () => setSelectedPlayerId(selectedPlayerId === item.id ? null : item.id) : undefined}
+                title={manualMode && courtPicked ? `Swap with ${item.name}` : undefined}
+                onClick={manualMode ? () => {
+                  if (courtPicked && selection?.kind === 'player') { swapPlayers(selection.player.id, item.id); setSelectedPlayerId(null); return; }
+                  setSelectedPlayerId(selectedPlayerId === item.id ? null : item.id);
+                } : undefined}
                 draggable={manualMode}
                 onDragStart={manualMode ? (e) => handleDragStart(e, item, index) : undefined}
                 onDragOver={(e) => handleDragOver(e, index)}
