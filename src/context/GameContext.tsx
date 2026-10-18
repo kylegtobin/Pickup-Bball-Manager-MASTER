@@ -1,6 +1,6 @@
 import React, { createContext, useState, useContext, useCallback, useEffect, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { Player, PreviousTeam, WaitingQueueItem, GameState } from '../types'; 
+import { Player, PreviousTeam, WaitingQueueItem, GameState, Regular, PlayerRef, GameRecord, NightSummary } from '../types';
 import { useToast } from '../components/ui/Toast'; 
 import { planChallengers } from '../utils/formChallengers';
 
@@ -107,6 +107,16 @@ export interface GameContextProps {
   movePlayerIntoGroup: (playerId: string, groupId: string) => void;
   selectedPlayerId: string | null;
   setSelectedPlayerId: (id: string | null) => void;
+  // Saved regulars on this device, for tap-to-sign-in
+  regulars: Regular[];
+  forgetRegular: (id: string) => void;
+  lastAdded: { id: string; name: string; at: number } | null;
+  // Saving: 'off' for the sample, 'failed' if this browser won't store the night
+  saveStatus: 'saved' | 'failed' | 'off';
+  otherTabOpen: boolean;
+  // Finish night: archive tonight on this device and clear the courts
+  finishNight: () => NightSummary | null;
+  archive: NightSummary[];
 }
 
 const defaultGameState: GameState = {
@@ -134,7 +144,8 @@ const defaultGameState: GameState = {
   bestStreak: null,
   sessionStartedAt: null,
   lastResultAt: null,
-  playersTonight: []
+  playersTonight: [],
+  games: []
 };
 
 // PENDING_QUEUE_UPDATE and FORMING_CHALLENGERS only exist for a moment while a result is processed.
@@ -146,7 +157,10 @@ const countPlayers = (s: GameState) =>
   s.waitingQueue.reduce((n, item) => n + (isPreviousTeam(item) ? item.players.length : 1), 0);
 
 // Who is where. Undo records a step whenever this changes (not on clock ticks or mode switches).
+// The game count is part of it, so a result is always a step even when nobody moves
+// (with exactly 10 players, a Champions win puts the same two teams right back on).
 const rosterSignature = (s: GameState) => JSON.stringify([
+  s.games.length,
   s.champions.map(p => p.id),
   s.challengers.map(p => p.id),
   s.waitingQueue.map(item => (isPreviousTeam(item) ? [item.id, item.players.map(p => p.id)] : item.id)),
@@ -154,7 +168,10 @@ const rosterSignature = (s: GameState) => JSON.stringify([
 
 const SAVE_VERSION = 1;
 
-const readSavedSession = (key: string): { savedAt: number; state: GameState } | null => {
+type UndoStep = { state: GameState; label: string };
+const SAVED_UNDO_STEPS = 15; // Undo steps kept with the saved night, so Undo still works after a refresh
+
+const readSavedSession = (key: string): { savedAt: number; state: GameState; history: UndoStep[] } | null => {
   try {
     const raw = window.localStorage.getItem(key);
     if (!raw) return null;
@@ -162,11 +179,37 @@ const readSavedSession = (key: string): { savedAt: number; state: GameState } | 
     if (!data || data.v !== SAVE_VERSION || !data.state) return null;
     const state: GameState = { ...defaultGameState, ...data.state };
     if (countPlayers(state) === 0 || !isStable(state.status)) return null;
-    return { savedAt: Number(data.savedAt) || Date.now(), state };
+    const history: UndoStep[] = Array.isArray(data.history)
+      ? data.history
+          .filter((h: UndoStep) => h && h.state && typeof h.label === 'string')
+          .map((h: UndoStep) => ({ label: h.label, state: { ...defaultGameState, ...h.state } }))
+      : [];
+    return { savedAt: Number(data.savedAt) || Date.now(), state, history };
   } catch {
     return null;
   }
 };
+
+const readList = <T,>(key: string): T[] => {
+  try {
+    const data = JSON.parse(window.localStorage.getItem(key) || '[]');
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
+};
+
+const writeList = (key: string, list: unknown[]): boolean => {
+  try {
+    window.localStorage.setItem(key, JSON.stringify(list));
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const ref = (p: Player): PlayerRef => ({ id: p.rid ?? p.id, name: p.name });
+const ARCHIVE_LIMIT = 60; // Most recent finished nights kept on this device
 
 // Create the context
 const GameContext = createContext<GameContextProps | undefined>(undefined);
@@ -176,8 +219,15 @@ const GameContext = createContext<GameContextProps | undefined>(undefined);
 // Each provider keeps its own in-memory state, so a sample can never touch a real session.
 // persistKey turns on "save the night" for that provider. Only the real session passes it;
 // the sample never does, so a sample can never write over a saved night.
-export function GameProvider({ children, initialState, persistKey }: { children: React.ReactNode; initialState?: Partial<GameState>; persistKey?: string }) {
+// initialRegulars gives the sample a made-up list to tap; only the real session saves its list.
+export function GameProvider({ children, initialState, persistKey, initialRegulars }: { children: React.ReactNode; initialState?: Partial<GameState>; persistKey?: string; initialRegulars?: Regular[] }) {
   const [gameState, setGameState] = useState<GameState>(() => ({ ...defaultGameState, ...initialState }));
+  const regularsKey = persistKey ? `${persistKey}-regulars` : null;
+  const archiveKey = persistKey ? `${persistKey}-archive` : null;
+  const [regulars, setRegulars] = useState<Regular[]>(() => (regularsKey ? readList<Regular>(regularsKey) : initialRegulars ?? []));
+  const [archive, setArchive] = useState<NightSummary[]>(() => (archiveKey ? readList<NightSummary>(archiveKey) : []));
+  const [lastAdded, setLastAdded] = useState<{ id: string; name: string; at: number } | null>(null);
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'failed' | 'off'>(persistKey ? 'saved' : 'off');
 
   // ---- Game clock ----
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -214,8 +264,8 @@ export function GameProvider({ children, initialState, persistKey }: { children:
   }, []);
 
   // ---- Undo ----
-  const [history, setHistory] = useState<{ state: GameState; label: string }[]>([]);
-  const historyRef = useRef<{ state: GameState; label: string }[]>([]);
+  const [history, setHistory] = useState<UndoStep[]>([]);
+  const historyRef = useRef<UndoStep[]>([]);
   const lastStableRef = useRef<GameState | null>(null);
   const lastSignatureRef = useRef<string | null>(null);
   const restoringRef = useRef(false);
@@ -238,23 +288,64 @@ export function GameProvider({ children, initialState, persistKey }: { children:
   }, [gameState]);
 
   // ---- Save the night (real session only) ----
-  const [savedSession, setSavedSession] = useState<{ savedAt: number; state: GameState } | null>(
+  const [savedSession, setSavedSession] = useState<{ savedAt: number; state: GameState; history: UndoStep[] } | null>(
     () => (persistKey ? readSavedSession(persistKey) : null)
   );
 
   useEffect(() => {
     // Never save while a saved night is waiting for Resume or Start fresh, or mid-result.
     if (!persistKey || savedSession || !isStable(gameState.status)) return;
+    let ok = true;
     try {
       if (countPlayers(gameState) === 0) {
         window.localStorage.removeItem(persistKey);
       } else {
-        window.localStorage.setItem(persistKey, JSON.stringify({ v: SAVE_VERSION, savedAt: Date.now(), state: gameState }));
+        const steps = historyRef.current.slice(-SAVED_UNDO_STEPS);
+        try {
+          window.localStorage.setItem(persistKey, JSON.stringify({ v: SAVE_VERSION, savedAt: Date.now(), state: gameState, history: steps }));
+        } catch {
+          // Too big with the undo steps: save the night itself, which is what matters most.
+          window.localStorage.setItem(persistKey, JSON.stringify({ v: SAVE_VERSION, savedAt: Date.now(), state: gameState }));
+        }
       }
     } catch {
       // Storage blocked or full: the night still runs, it just won't survive a refresh.
+      ok = false;
     }
+    setSaveStatus(ok ? 'saved' : 'failed');
   }, [gameState, persistKey, savedSession]);
+
+  // Saved regulars and finished nights stay on this device (real session only)
+  useEffect(() => {
+    if (!regularsKey) return;
+    let existing: string | null = null;
+    try { existing = window.localStorage.getItem(regularsKey); } catch { /* blocked */ }
+    if (regulars.length === 0 && existing === null) return; // nothing to keep yet, so write nothing
+    writeList(regularsKey, regulars);
+  }, [regulars, regularsKey]);
+
+  // Two tabs on one device would save over each other, so say so when a second one opens
+  const [otherTabs, setOtherTabs] = useState<string[]>([]);
+  useEffect(() => {
+    if (!persistKey || typeof BroadcastChannel === 'undefined') return;
+    const me = uuidv4();
+    const channel = new BroadcastChannel(`${persistKey}-tabs`);
+    channel.onmessage = (e: MessageEvent) => {
+      const { type, id } = e.data || {};
+      if (!id || id === me) return;
+      if (type === 'bye') { setOtherTabs(list => list.filter(x => x !== id)); return; }
+      setOtherTabs(list => (list.includes(id) ? list : [...list, id]));
+      if (type === 'hello') channel.postMessage({ type: 'here', id: me });
+    };
+    channel.postMessage({ type: 'hello', id: me });
+    const bye = () => { try { channel.postMessage({ type: 'bye', id: me }); } catch { /* closing */ } };
+    window.addEventListener('pagehide', bye);
+    return () => {
+      window.removeEventListener('pagehide', bye);
+      bye();
+      channel.close();
+    };
+  }, [persistKey]);
 
   // ---- Manual mode: tap a player, then tap where they go ----
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
@@ -293,18 +384,32 @@ export function GameProvider({ children, initialState, persistKey }: { children:
       throw new Error(`"${trimmedName}" already exists.`);
     }
 
+    // A regular keeps the same id every night, so their games can add up later
+    const known = regulars.find(r => r.name.toLowerCase() === trimmedName.toLowerCase());
+    const rid = known ? known.id : uuidv4();
+    const playerName = known ? known.name : trimmedName;
+    const night = gameState.sessionStartedAt ?? Date.now();
+    setRegulars(list => {
+      const existing = list.find(r => r.id === rid);
+      if (!existing) return [...list, { id: rid, name: playerName, nights: 1, lastNight: night }];
+      if (existing.lastNight === night) return list;
+      return list.map(r => (r.id === rid ? { ...r, nights: r.nights + 1, lastNight: night } : r));
+    });
+
     const newPlayer: Player = {
       id: uuidv4(),
-      name: trimmedName,
+      name: playerName,
+      rid,
     };
+    setLastAdded({ id: newPlayer.id, name: playerName, at: Date.now() });
 
-    pendingLabelRef.current = `Added ${trimmedName}`;
+    pendingLabelRef.current = `Added ${playerName}`;
     setGameState(prev => {
       const updatedState = { ...prev };
-      updatedState.sessionStartedAt = prev.sessionStartedAt ?? Date.now();
+      updatedState.sessionStartedAt = prev.sessionStartedAt ?? night;
       updatedState.playersTonight = prev.playersTonight.some(n => n.toLowerCase() === trimmedName.toLowerCase())
         ? prev.playersTonight
-        : [...prev.playersTonight, trimmedName];
+        : [...prev.playersTonight, playerName];
 
       // If we're in INITIAL state and teams aren't full, add directly to teams
       if (prev.status === 'INITIAL' || prev.status === 'WAITING_FOR_PLAYERS') {
@@ -335,7 +440,11 @@ export function GameProvider({ children, initialState, persistKey }: { children:
 
       return updatedState;
     });
-  }, [gameState, showNotification, runGameTimer]);
+  }, [gameState, regulars, showNotification, runGameTimer]);
+
+  const forgetRegular = useCallback((id: string) => {
+    setRegulars(list => list.filter(r => r.id !== id));
+  }, []);
 
   // Remove player from any location (teams or queue)
   const removePlayer = useCallback((idOrName: string) => {
@@ -741,7 +850,7 @@ export function GameProvider({ children, initialState, persistKey }: { children:
   }, []);
 
   // Step 1: Process Game End (Initial setup)
-  const processGameEnd = (winningTeam: Player[], losingTeam: Player[], winnerSide: 'champions' | 'challengers') => {
+  const processGameEnd = (winningTeam: Player[], losingTeam: Player[], winnerSide: 'champions' | 'challengers', startedAt: number | null) => {
     console.log("[processGameEnd - Step 1] Start");
     console.log("[processGameEnd - Step 1] Winners:", winningTeam);
     console.log("[processGameEnd - Step 1] Losers:", losingTeam);
@@ -789,6 +898,14 @@ export function GameProvider({ children, initialState, persistKey }: { children:
         gamesPlayed: prev.gamesPlayed + 1,
         bestStreak,
         lastResultAt: Date.now(),
+        games: [...prev.games, {
+          n: prev.games.length + 1,
+          startedAt,
+          endedAt: Date.now(),
+          winner: winnerSide,
+          winners: winningTeam.map(ref),
+          losers: losingTeam.map(ref),
+        } as GameRecord],
         champions: [], // Clear current teams
         challengers: [],
         waitingQueue: [], // Clear queue, will be rebuilt in next step
@@ -978,9 +1095,17 @@ export function GameProvider({ children, initialState, persistKey }: { children:
         })
       ];
 
+      // Note the shootout on the game that caused it
+      const games = prev.games.length === 0 ? prev.games : prev.games.map((g, i) =>
+        i === prev.games.length - 1
+          ? { ...g, shootout: { spots: selectedPlayers.length, shooters: prev.shootoutTeam!.players.map(ref), picked: selectedPlayers.map(ref) } }
+          : g
+      );
+
       // Check for duplicate IDs in the resulting state
       const resultState = {
         ...prev,
+        games,
         challengers,
         waitingQueue: newQueue,
       };
@@ -1009,6 +1134,7 @@ export function GameProvider({ children, initialState, persistKey }: { children:
         // Use fixed versions in the return value below
         return {
           ...prev,
+          games,
           challengers: fixedChallengers,
           waitingQueue: fixedQueue,
           status: 'READY',
@@ -1024,6 +1150,7 @@ export function GameProvider({ children, initialState, persistKey }: { children:
       
       return {
         ...prev,
+        games,
         challengers,
         waitingQueue: newQueue,
         status: 'READY',
@@ -1081,6 +1208,7 @@ export function GameProvider({ children, initialState, persistKey }: { children:
 
     // Stop the game timer
     stopGameTimer();
+    const startedAt = gameState.gameStartTime;
     const resultLabel = `${winner === 'champions' ? 'Champions' : 'Challengers'} won`;
     pendingLabelRef.current = resultLabel;
 
@@ -1100,7 +1228,7 @@ export function GameProvider({ children, initialState, persistKey }: { children:
         const winningTeam = winner === 'champions' ? gameState.champions : gameState.challengers;
         const losingTeam = winner === 'champions' ? gameState.challengers : gameState.champions;
         pendingLabelRef.current = resultLabel;
-        processGameEnd(winningTeam, losingTeam, winner);
+        processGameEnd(winningTeam, losingTeam, winner, startedAt);
       }, 50);
       return;
     }
@@ -1124,7 +1252,7 @@ export function GameProvider({ children, initialState, persistKey }: { children:
       elapsedMinutes: 0
     }));
 
-    processGameEnd(winningTeam, losingTeam, winner); // Start the multi-step process
+    processGameEnd(winningTeam, losingTeam, winner, startedAt); // Start the multi-step process
   };
 
   const dismissShootoutModal = useCallback(() => {
@@ -1211,6 +1339,8 @@ export function GameProvider({ children, initialState, persistKey }: { children:
   const resumeSession = useCallback(() => {
     if (!savedSession) return;
     restoringRef.current = true;
+    historyRef.current = savedSession.history;
+    setHistory(savedSession.history);
     setGameState(savedSession.state);
     setSavedSession(null);
     if (savedSession.state.gameStartTime) resumeGameTimer();
@@ -1222,6 +1352,34 @@ export function GameProvider({ children, initialState, persistKey }: { children:
     }
     setSavedSession(null);
   }, [persistKey]);
+
+  // Finish night: keep a summary of tonight on this device, then clear the courts for next time.
+  const finishNight = useCallback((): NightSummary | null => {
+    const s = gameState;
+    if (!isStable(s.status) || (s.games.length === 0 && countPlayers(s) === 0)) return null;
+    const summary: NightSummary = {
+      id: uuidv4(),
+      startedAt: s.sessionStartedAt,
+      endedAt: Date.now(),
+      gamesPlayed: s.gamesPlayed,
+      playersTonight: s.playersTonight,
+      bestStreak: s.bestStreak,
+      games: s.games,
+    };
+    if (archiveKey) {
+      const next = [summary, ...archive].slice(0, ARCHIVE_LIMIT);
+      setArchive(next);
+      if (!writeList(archiveKey, next)) setSaveStatus('failed');
+    }
+    stopGameTimer();
+    restoringRef.current = true;
+    historyRef.current = [];
+    setHistory([]);
+    setSelectedPlayerId(null);
+    setLastAdded(null);
+    setGameState({ ...defaultGameState });
+    return summary;
+  }, [gameState, archive, archiveKey, stopGameTimer]);
 
   const value: GameContextProps = {
     gameState,
@@ -1251,6 +1409,13 @@ export function GameProvider({ children, initialState, persistKey }: { children:
     movePlayerIntoGroup,
     selectedPlayerId,
     setSelectedPlayerId,
+    regulars,
+    forgetRegular,
+    lastAdded,
+    saveStatus,
+    otherTabOpen: otherTabs.length > 0,
+    finishNight,
+    archive,
   };
 
   return (
