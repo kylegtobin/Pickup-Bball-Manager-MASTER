@@ -9,7 +9,7 @@ import Switch from './components/ui/Switch';
 import { ToastProvider } from './components/ui/Toast';
 import PBM1Logo from './assets/images/PBM 1.jpg';
 import ContentModal from './components/modal/ContentModal';
-import { GameRules, UserGuide } from './components/HelpGuides';
+import { GameRules, UserGuide, MyStory } from './components/HelpGuides';
 import Champ1 from './assets/images/Champ 1.jpg';
 import Champ2 from './assets/images/Champ 2.jpg';
 import { createSample, isSampleLink } from './sample/sampleGame';
@@ -22,11 +22,10 @@ import RecapModal from './components/modal/RecapModal';
 import SignInSheet from './components/modal/SignInSheet';
 import { describeSpot } from './utils/spot';
 import { useToast } from './components/ui/Toast';
-import SittingOut from './components/queue/SittingOut';
 import TvWindow from './components/TvWindow';
 import { isTvLink, openTvWindow, tvSupported, useTvBroadcast, TV_BLOCKED_MESSAGE } from './utils/tvLink';
 import { blockingDialogOpen, typing } from './utils/visibility';
-import { runViewToken } from './cloud/config';
+import { runViewToken, isPhone, runnerOnThisPhone, readCloudSwitch } from './cloud/config';
 import { useCloud } from './cloud/useCloud';
 import { syncText } from './cloud/status';
 
@@ -36,6 +35,7 @@ import './App.css';
 const PhonePanel = React.lazy(() => import('./components/cloud/PhonePanel'));
 // The phone page is its own small download too
 const RunView = React.lazy(() => import('./components/RunView'));
+const PhoneHome = React.lazy(() => import('./components/PhoneHome'));
 
 // Where the real session is saved on this device. The sample never saves.
 const REAL_SESSION_KEY = 'pbm-session-v1';
@@ -56,6 +56,15 @@ function App() {
   }
   // The second-screen window only shows court view and follows the main screen
   if (isTvLink()) return <TvWindow />;
+  // A phone with no run link is almost always a player checking the line, so it gets the player page
+  // (the full app is one tap away). Only while phone view is on.
+  if (isPhone() && !runnerOnThisPhone() && readCloudSwitch()) {
+    return (
+      <React.Suspense fallback={<div className="min-h-screen bg-[#0E1A33]" />}>
+        <PhoneHome />
+      </React.Suspense>
+    );
+  }
   return <MainApp />;
 }
 
@@ -149,9 +158,11 @@ function PickupBasketballApp({ sample, onTrySample, active }: PickupBasketballAp
     lastAdded
   } = useGame();
   const { toast } = useToast();
-  useTvBroadcast(gameState, !!sample, active);
   // Phone view (off unless switched on for this browser). The sample never shares.
   const cloud = useCloud(gameState, !sample);
+  // The run's code, for court view, while phones are following (not paused, not the sample)
+  const phoneCode = cloud.on && !sample && !cloud.paused ? cloud.run?.code ?? null : null;
+  useTvBroadcast(gameState, !!sample, active, phoneCode);
   const [phoneOpen, setPhoneOpen] = React.useState(false);
   const [, setTick] = React.useState(0);
   React.useEffect(() => {
@@ -221,7 +232,7 @@ function PickupBasketballApp({ sample, onTrySample, active }: PickupBasketballAp
 
   // Saved names that match what's typed, for one-tap sign-in from the box
   const signedIn = new Set(
-    [...champions, ...challengers, ...gameState.waitingQueue.flatMap(i => ('players' in i ? i.players : [i]))].filter(p => !p.away).map(p => p.name.toLowerCase())
+    [...champions, ...challengers, ...gameState.waitingQueue.flatMap(i => ('players' in i ? i.players : [i]))].map(p => p.name.toLowerCase())
   );
   const typed = newPlayerName.trim().toLowerCase();
   const suggestions = typed
@@ -262,7 +273,7 @@ function PickupBasketballApp({ sample, onTrySample, active }: PickupBasketballAp
       setNewPlayerName('');
     } catch (error) {
       if (error instanceof Error) {
-        setErrorMessage(`"${newPlayerName}" already exists. Please use a different name or add a last initial.`);
+        setErrorMessage(`"${newPlayerName.trim()}" is already in. Two of you? Add a letter, like "Mike Sm.", or use your full name.`);
         setShowError(true);
       }
     }
@@ -375,106 +386,7 @@ function PickupBasketballApp({ sample, onTrySample, active }: PickupBasketballAp
                   type="button"
                   className="text-gray-600 hover:text-[#1E3A8A] transition-colors duration-200 font-medium text-sm whitespace-nowrap px-2 bg-transparent"
                   onClick={() => {
-                    openModal("My Story", (
-                      <div>
-                        <h3 className="text-2xl font-bold mb-4">Welcome to Pickup Basketball Manager!</h3>
-                        <p className="mb-4 text-lg">I'm <strong>Kyle Tobin</strong>, designer and developer of this site.</p>
-                        
-                        <p className="mb-4 text-lg">
-                          As an <em>avid basketball player</em> and a <em>multiple-time Midtown Basketball League Champion</em>, 
-                          I've spent countless hours enjoying games at <strong>Midtown Athletic Club in Chicago</strong>.
-                        </p>
-                        
-                        <p className="mb-4 text-lg">
-                          I created this site to <strong>streamline and improve the pickup basketball experience</strong>. 
-                          Previously, players managed game participation by scribbling their names on paper or keeping mental 
-                          track of games and arrivals — methods that often led to <em>confusion, disagreements, and frustration</em>.
-                        </p>
-                        
-                        <p className="mb-4 text-lg">
-                          <strong>Pickup Basketball Manager</strong> solves these issues by:
-                        </p>
-                        
-                        <ul className="list-disc pl-8 mb-6 text-lg">
-                          <li className="mb-2"><em>Fairly managing the game rotation</em></li>
-                          <li className="mb-2"><em>Clearly indicating who's playing next</em></li>
-                          <li className="mb-2"><em>Providing accurate wait-time estimates</em></li>
-                        </ul>
-                        
-                        <p className="mb-6 text-lg">
-                          My goal is to provide a platform that ensures a <strong>great experience for all players.</strong>
-                        </p>
-                        
-                        <p className="mb-10 text-lg">
-                          Thanks for joining the game — <strong>see you on the court!</strong> 🏀
-                        </p>
-                        
-                        {/* Social Media Links */}
-                        <div className="flex items-center mb-10">
-                          <p className="mr-4 text-lg font-bold">Let's connect!</p>
-                          <a 
-                            href="https://www.linkedin.com/in/kylegtobin/" 
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-block mr-4 relative group"
-                          >
-                            <svg 
-                              xmlns="http://www.w3.org/2000/svg" 
-                              width="40" 
-                              height="40" 
-                              viewBox="0 0 24 24"
-                              className="hover:opacity-80 transition-opacity"
-                            >
-                              <path 
-                                fill="#0077B5" 
-                                d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"
-                              />
-                            </svg>
-                            <span className="absolute bottom-full left-1/2 transform -translate-x-1/2 -translate-y-1 bg-black text-white text-xs py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
-                              LinkedIn
-                            </span>
-                          </a>
-                          <a 
-                            href="https://www.instagram.com/kyle.tobin/" 
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-block relative group"
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" className="hover:opacity-80 transition-opacity" role="img" aria-label="Instagram">
-                              <defs>
-                                <linearGradient id="ig-grad" x1="0" y1="1" x2="1" y2="0">
-                                  <stop offset="0" stopColor="#FEDA75" /><stop offset="0.35" stopColor="#FA7E1E" /><stop offset="0.6" stopColor="#D62976" /><stop offset="1" stopColor="#4F5BD5" />
-                                </linearGradient>
-                              </defs>
-                              <rect width="24" height="24" rx="5.5" fill="url(#ig-grad)" />
-                              <rect x="5" y="5" width="14" height="14" rx="4" fill="none" stroke="#fff" strokeWidth="1.8" />
-                              <circle cx="12" cy="12" r="3.3" fill="none" stroke="#fff" strokeWidth="1.8" />
-                              <circle cx="16.3" cy="7.7" r="1.05" fill="#fff" />
-                            </svg>
-                            <span className="absolute bottom-full left-1/2 transform -translate-x-1/2 -translate-y-1 bg-black text-white text-xs py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
-                              Instagram
-                            </span>
-                          </a>
-                        </div>
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-10 mt-8">
-                          <div className="flex flex-col items-center">
-                            <img 
-                              src={Champ1} 
-                              alt="Championship 1" 
-                              className="rounded-lg shadow-xl border-4 border-gray-300 w-full h-auto object-contain max-h-[500px]"
-                            />
-                          </div>
-                          <div className="flex flex-col items-center">
-                            <img 
-                              src={Champ2} 
-                              alt="Championship 2" 
-                              className="rounded-lg shadow-xl border-4 border-gray-300 w-full h-auto object-contain max-h-[500px]"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    ));
+                    openModal("My Story", <MyStory photos={[Champ1, Champ2]} />);
                   }}
                 >
                   My Story
@@ -563,17 +475,17 @@ function PickupBasketballApp({ sample, onTrySample, active }: PickupBasketballAp
               </span>
             )}
           </div>
-          <div className="flex gap-3 xl:gap-4 items-center pointer-events-auto">
+          <div className="flex gap-3 items-center pointer-events-auto">
             <button
               onClick={handleUndo}
               disabled={!canUndo}
               title={canUndo ? `Undo: ${undoLabel}` : 'Nothing to undo yet'}
-              className={`flex flex-col items-center justify-center min-w-[7.5rem] h-[52px] px-4 rounded-lg border transition-colors duration-200 ${
+              className={`flex flex-col items-center justify-center w-[7.5rem] h-[52px] px-2 rounded-lg border transition-colors duration-200 ${
                 canUndo ? 'bg-white border-[#D5DAE1] text-[#1B2430] hover:bg-gray-100' : 'bg-transparent border-[#D5DAE1] text-gray-400 cursor-not-allowed'
               }`}
             >
               <span className="text-lg font-bold leading-tight">&#8630; Undo</span>
-              {canUndo && <span className="text-xs leading-tight text-gray-600 max-w-[9rem] truncate">{undoLabel}</span>}
+              {canUndo && <span className="text-xs leading-tight text-gray-600 max-w-full truncate">{undoLabel}</span>}
             </button>
             <button
               onClick={(e) => {
@@ -624,7 +536,7 @@ function PickupBasketballApp({ sample, onTrySample, active }: PickupBasketballAp
                 onKeyPress={handleKeyPress}
                 onFocus={() => setInputFocused(true)}
                 onBlur={() => setTimeout(() => setInputFocused(false), 150)}
-                placeholder="Enter player name"
+                placeholder="Name, like Mike S."
                 aria-label="Enter player name"
                 className="flex-1 min-w-0 px-3 py-2.5 text-lg bg-white border border-[#D5DAE1] rounded-l-lg focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
               />
@@ -644,7 +556,7 @@ function PickupBasketballApp({ sample, onTrySample, active }: PickupBasketballAp
                         aria-selected={false}
                         onMouseDown={(e) => e.preventDefault()}
                         onClick={() => {
-                          try { addPlayer(r.name); setNewPlayerName(''); } catch { setErrorMessage(`"${r.name}" already exists.`); setShowError(true); }
+                          try { addPlayer(r.name); setNewPlayerName(''); } catch { setErrorMessage(`"${r.name}" is already in. Two of you? Add a letter, like "Mike Sm.", or use your full name.`); setShowError(true); }
                         }}
                         className="w-full text-left px-4 py-2.5 text-lg hover:bg-blue-50"
                       >
@@ -696,7 +608,6 @@ function PickupBasketballApp({ sample, onTrySample, active }: PickupBasketballAp
 
         <WaitingQueue />
 
-        <SittingOut />
 
         {/* Modals */}
         <ContentModal
@@ -714,7 +625,7 @@ function PickupBasketballApp({ sample, onTrySample, active }: PickupBasketballAp
 
         {signInOpen && <SignInSheet onClose={() => setSignInOpen(false)} isSample={!!sample} />}
 
-        {courtViewOpen && <CourtView onClose={() => setCourtViewOpen(false)} isSample={!!sample} />}
+        {courtViewOpen && <CourtView onClose={() => setCourtViewOpen(false)} isSample={!!sample} phoneCode={phoneCode} />}
 
         {phoneOpen && cloud.on && !sample && (
           <React.Suspense fallback={null}>
