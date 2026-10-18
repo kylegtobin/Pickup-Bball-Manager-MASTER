@@ -443,7 +443,7 @@ function PickupBasketballApp({ sample, onTrySample, active }: PickupBasketballAp
 
                         <h3 className="text-xl font-bold mb-4">📺 Court View & Recap</h3>
                         <ul className="list-disc pl-6 mb-6">
-                          <li><strong>Court View</strong> shows who's playing, the game clock, and who's up next, including any upcoming shootout. Use <strong>Full screen</strong> on a TV or tablet.</li>
+                          <li><strong>Court View</strong> puts the clock and score on a big scoreboard up top, with who's playing and who's up next below, including any upcoming shootout. Use <strong>Full screen</strong> on a TV or tablet.</li>
                           <li><strong>Second screen</strong> opens court view in its own window. Drag it onto the TV or projector and click Full screen. It follows the main screen, so the runner keeps working as normal.</li>
                           <li>Court view celebrates each win (with the score and any streak) and turns a shootout into a big spotlight. <strong>Sound</strong> is off unless you turn it on for that screen: a horn at 0:00 and a chime for a win.</li>
                           <li><strong>Recap</strong> (top menu) shows games played, players tonight, the longest win streak, and who had the most wins and games. Download a recap image for the group chat or a backup of the night.</li>
