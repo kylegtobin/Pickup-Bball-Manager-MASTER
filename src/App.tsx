@@ -9,6 +9,7 @@ import Switch from './components/ui/Switch';
 import { ToastProvider } from './components/ui/Toast';
 import PBM1Logo from './assets/images/PBM 1.jpg';
 import ContentModal from './components/modal/ContentModal';
+import { GameRules, UserGuide } from './components/HelpGuides';
 import Champ1 from './assets/images/Champ 1.jpg';
 import Champ2 from './assets/images/Champ 2.jpg';
 import { createSample, isSampleLink } from './sample/sampleGame';
@@ -350,59 +351,7 @@ function PickupBasketballApp({ sample, onTrySample, active }: PickupBasketballAp
                   type="button"
                   className="text-gray-600 hover:text-[#1E3A8A] transition-colors duration-200 font-medium text-sm whitespace-nowrap px-2 bg-transparent"
                   onClick={() => {
-                    openModal("Game Format & Rules", (
-                      <div className="text-lg">
-                        <h3 className="text-xl font-bold mb-4">Starting a Game</h3>
-                        <ul className="list-disc pl-6 mb-6">
-                          <li>Games begin when <strong>10 players</strong> check in</li>
-                          <li>Played <strong>5-on-5, full court</strong></li>
-                          <li><strong>Winners stay</strong> on as <strong>Champions</strong></li>
-                          <li><strong>Losing team</strong> goes to the waiting queue — <em>unless</em> there aren't enough players to form a new team</li>
-                        </ul>
-                        
-                        <hr className="my-6 border-t border-gray-300" />
-                        
-                        <h3 className="text-xl font-bold mb-4">Scoring</h3>
-                        <ul className="list-disc pl-6 mb-3">
-                          <li>✅ First to <strong>11 points</strong>, must <strong>win by 2</strong></li>
-                          <li>🎯 If no lead by 2 when a team hits <strong>15</strong>, the <strong>first to 15</strong> wins</li>
-                          <li>⏱️ Games are <strong>12 minutes</strong>. When time runs out, the <strong>team ahead wins</strong>. If it's tied, <strong>next bucket wins</strong>.</li>
-                          <li><strong>Scoring is 1s and 2s:</strong></li>
-                          <ul className="list-disc pl-12">
-                            <li>Buckets inside the arc count <strong>1</strong></li>
-                            <li>Threes count <strong>2</strong></li>
-                          </ul>
-                          <li>🚫 <strong>No free throws</strong> — if fouled on a shot, your team keeps the ball</li>
-                          <li>🫱 Players <strong>call their own fouls</strong> — <strong>play fair and be respectful</strong></li>
-                        </ul>
-                        
-                        <hr className="my-6 border-t border-gray-300" />
-                        
-                        <h3 className="text-xl font-bold mb-4">Three-Point Shootout</h3>
-                        
-                        <p className="font-bold mb-2">When It Happens</p>
-                        <ul className="list-disc pl-6 mb-4">
-                          <li>A shootout takes place when the <strong>next group in line</strong> (a previous losing team) has <strong>more players than there are open spots</strong> on the Challengers</li>
-                          <li>Everyone in that group competes for the <strong>1 to 4 open spots</strong>. Nobody behind the group skips ahead.</li>
-                        </ul>
-                        
-                        <p className="font-bold mb-2">How It Works</p>
-                        <ul className="list-disc pl-6 mb-3">
-                          <li>All eligible players take <strong>one three-point shot</strong></li>
-                          <li>✅ If the <strong>exact number</strong> of players make it to match the open spots — they're in</li>
-                          <li>🔁 If <strong>fewer players make it</strong> than spots available:</li>
-                          <ul className="list-disc pl-6 ml-6">
-                            <li>Players who missed keep shooting until all spots are filled</li>
-                          </ul>
-                          <li>🔄 If <strong>more players make it</strong> than spots available:</li>
-                          <ul className="list-disc pl-6 ml-6">
-                            <li>Only those who made it in the <strong>previous round</strong> continue shooting until the correct number remains</li>
-                          </ul>
-                        </ul>
-                        
-                        <p className="text-center font-bold text-xl mt-8 mb-4">Let's hoop — play fair, have fun, and keep it moving! 💪🏀</p>
-                      </div>
-                    ));
+                    openModal("Game Format & Rules", <GameRules />);
                   }}
                 >
                   Game Format & Rules
@@ -414,86 +363,7 @@ function PickupBasketballApp({ sample, onTrySample, active }: PickupBasketballAp
                   type="button"
                   className="text-gray-600 hover:text-[#1E3A8A] transition-colors duration-200 font-medium text-sm whitespace-nowrap px-2 bg-transparent"
                   onClick={() => {
-                    openModal("Site User Guide", (
-                      <div className="text-lg">
-                        <h3 className="text-xl font-bold mb-4">📋 Quick Start</h3>
-                        <ul className="list-disc pl-6 mb-6">
-                          <li>Tap <strong>Sign in</strong> and tap your name. New here? Type your name and add yourself; next time it's saved on this device and you can just tap it. The runner can also type a name and click <strong>Add Player</strong>.</li>
-                          <li>The first 10 players fill the <strong>Champions</strong> & <strong>Challengers</strong> teams; everyone after that joins the <strong>Waiting Queue</strong>. After signing in, the app says where you are, like "2 games away".</li>
-                          <li>Game results can be recorded once both <strong>Champions</strong> and <strong>Challengers</strong> teams have 5 players each.</li>
-                          <li>After a game, click the <strong>Champions Won</strong> or <strong>Challengers Won</strong> buttons at the top of the page.</li>
-                          <li>Winners stay, losers queue up, and the next 5 Challengers are filled automatically, with a three-point shootout pop-up appearing when required.</li>
-                          <li>Tapped the wrong button? Click <strong>Undo</strong> to step back one change at a time. It still works after a refresh.</li>
-                        </ul>
-
-                        <hr className="my-6 border-t border-gray-300" />
-
-                        <h3 className="text-xl font-bold mb-4">🏀 Keeping Score</h3>
-                        <ul className="list-disc pl-6 mb-6">
-                          <li>When both teams have 5, the scoreboard shows above the teams. Tap <strong>Start</strong> at tip-off; tap again to pause.</li>
-                          <li>Tap <strong>+1</strong> for a bucket and <strong>+2</strong> for a three. Undo takes back the last basket.</li>
-                          <li>The app knows the rules: first to 11 win by 2, first to 15, and at 12:00 the team ahead wins (tied means next bucket wins). When a team wins it asks you to <strong>Record result</strong>, which rotates the line.</li>
-                          <li>Mis-tap? Use <strong>Fix score</strong> or <strong>Correct score</strong>. Forgot to start the clock? Pause it and use <strong>Adjust time</strong>.</li>
-                          <li>On a laptop, keys work too: <strong>Q</strong>/<strong>W</strong> add 1/2 for the Champions, <strong>O</strong>/<strong>P</strong> for the Challengers, <strong>Space</strong> starts or pauses the clock, and <strong>Ctrl+Z</strong> (Cmd+Z on a Mac) undoes.</li>
-                          <li>The screen stays awake while the clock runs and while court view is open.</li>
-                          <li>Not keeping score tonight? Ignore it and use the Champions Won / Challengers Won buttons like always.</li>
-                        </ul>
-
-                        <hr className="my-6 border-t border-gray-300" />
-
-                        <h3 className="text-xl font-bold mb-4">📺 Court View & Recap</h3>
-                        <ul className="list-disc pl-6 mb-6">
-                          <li><strong>Court View</strong> puts the clock and score on a big scoreboard up top, with who's playing and who's up next below, including any upcoming shootout. Use <strong>Full screen</strong> on a TV or tablet.</li>
-                          <li><strong>Second screen</strong> opens court view in its own window. Drag it onto the TV or projector and click Full screen. It follows the main screen, so the runner keeps working as normal.</li>
-                          <li>Court view celebrates each win (with the score and any streak) and turns a shootout into a big spotlight. <strong>Sound</strong> is off unless you turn it on for that screen: a horn at 0:00 and a chime for a win.</li>
-                          <li><strong>Recap</strong> (top menu) shows games played, players tonight, the longest win streak, and who had the most wins and games. Download a recap image for the group chat or a backup of the night.</li>
-                          <li>At the end of the night, click <strong>Finish night</strong> in Recap. Tonight is saved under <strong>Past nights</strong> on this device and the courts clear for next time.</li>
-                          <li>Recap lists every game (who won, the score, who played, any shootout). <strong>Restore a backup</strong> adds a backed-up night to Past nights, or picks it back up when nothing is in progress.</li>
-                        </ul>
-
-                        <hr className="my-6 border-t border-gray-300" />
-
-                        <h3 className="text-xl font-bold mb-4">⏱️ Waiting Queue & Wait Times</h3>
-                        <ul className="list-disc pl-6 mb-6">
-                          <li>Players can see <strong>Estimated Wait Time</strong> (minutes) on the left side of the waiting queue and <strong>Number of games behind</strong> on the right side.</li>
-                          <li>Previous teams that have lost a game stay grouped together in the <strong>waiting queue</strong>.</li>
-                        </ul>
-
-                        <hr className="my-6 border-t border-gray-300" />
-
-                        <h3 className="text-xl font-bold mb-4">🛠️ Player & Game Management</h3>
-                        <ul className="list-disc pl-6 mb-6">
-                          <li><strong>Remove Player Options:</strong>
-                            <ul className="list-disc pl-6 mt-1">
-                              <li>Right-click a player card and select "Remove [Player Name]".</li>
-                              <li>Enter the player's name in the <strong>Name to remove</strong> box and click <strong>Remove Player</strong>.</li>
-                              <li>In Manual Mode, tap the player, then tap <strong>Remove</strong> in the dark bar.</li>
-                            </ul>
-                          </li>
-                          <li><strong>Manual Mode:</strong>
-                            <ul className="list-disc pl-6 mt-1">
-                              <li>Toggle the switch <strong>ON</strong> to arrange players.</li>
-                              <li>Activates automatically if a player is removed from Champions or Challengers.</li>
-                              <li>Drag a player, or tap a player and then tap where they go: an <strong>Open spot</strong> on a team or a <strong>Move here</strong> spot in the line.</li>
-                              <li>Tap a previous team's name to move the whole group.</li>
-                              <li><strong>Swap:</strong> tap a player, then tap a player on court (or, for someone on court, a player in line). The two trade places, which is how you sub someone in.</li>
-                              <li><strong>Sit out:</strong> tap a player, then <strong>Sit out</strong>. Someone waiting in line stays in their place, greyed out; if their turn comes while they're out, they're skipped and move to the end of the line. Someone on court opens their spot; <strong>Back</strong> returns them to it during the same game if nobody has taken it, otherwise to the end of the line. Signing in again works like Back. <strong>Left</strong> means they went home.</li>
-                              <li>Perfect for special situations: injured players, someone needing to move back in the queue for a phone call, or friends wanting to play together.</li>
-                              <li>Tap <strong>Done</strong> when finished arranging.</li>
-                            </ul>
-                          </li>
-                        </ul>
-
-                        <hr className="my-6 border-t border-gray-300" />
-
-                        <h3 className="text-xl font-bold mb-4">💾 Saved Automatically</h3>
-                        <ul className="list-disc pl-6 mb-6">
-                          <li>The night is saved on this device as you go. After a refresh or a closed tab, choose <strong>Resume session</strong> to pick up where you left off.</li>
-                        </ul>
-
-                        <p className="text-center font-bold text-xl mt-8 mb-4">Enjoy a seamless, automated, and fair basketball rotation! 🏀</p>
-                      </div>
-                    ));
+                    openModal("Site User Guide", <UserGuide />);
                   }}
                 >
                   Site User Guide
@@ -570,13 +440,17 @@ function PickupBasketballApp({ sample, onTrySample, active }: PickupBasketballAp
                             rel="noopener noreferrer"
                             className="inline-block relative group"
                           >
-                            <img 
-                              src="https://upload.wikimedia.org/wikipedia/commons/thumb/9/95/Instagram_logo_2022.svg/1200px-Instagram_logo_2022.svg.png" 
-                              alt="Instagram" 
-                              width="40" 
-                              height="40" 
-                              className="hover:opacity-80 transition-opacity"
-                            />
+                            <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" className="hover:opacity-80 transition-opacity" role="img" aria-label="Instagram">
+                              <defs>
+                                <linearGradient id="ig-grad" x1="0" y1="1" x2="1" y2="0">
+                                  <stop offset="0" stopColor="#FEDA75" /><stop offset="0.35" stopColor="#FA7E1E" /><stop offset="0.6" stopColor="#D62976" /><stop offset="1" stopColor="#4F5BD5" />
+                                </linearGradient>
+                              </defs>
+                              <rect width="24" height="24" rx="5.5" fill="url(#ig-grad)" />
+                              <rect x="5" y="5" width="14" height="14" rx="4" fill="none" stroke="#fff" strokeWidth="1.8" />
+                              <circle cx="12" cy="12" r="3.3" fill="none" stroke="#fff" strokeWidth="1.8" />
+                              <circle cx="16.3" cy="7.7" r="1.05" fill="#fff" />
+                            </svg>
                             <span className="absolute bottom-full left-1/2 transform -translate-x-1/2 -translate-y-1 bg-black text-white text-xs py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
                               Instagram
                             </span>
