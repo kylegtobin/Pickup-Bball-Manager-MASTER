@@ -1,5 +1,6 @@
 import React from 'react';
 import { useGame } from '../../context/GameContext';
+import { useDialogFocus } from '../../utils/useDialogFocus';
 
 const formatSavedAt = (savedAt: number): string => {
   const saved = new Date(savedAt);
@@ -17,16 +18,20 @@ const formatSavedAt = (savedAt: number): string => {
 const ResumePrompt: React.FC = () => {
   const { pendingResume, resumeSession, discardSavedSession } = useGame();
   const [confirmFresh, setConfirmFresh] = React.useState(false);
+  const dialogRef = React.useRef<HTMLDivElement>(null);
+  useDialogFocus(dialogRef, !!pendingResume);
 
   if (!pendingResume) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50" />
-      <div role="dialog" aria-labelledby="resume-title" className="relative bg-white rounded-xl shadow-xl max-w-md w-full p-6 border-t-[10px] border-[#1E3A8A]">
+      <div ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="resume-title" className="relative outline-none bg-white rounded-xl shadow-xl max-w-md w-full p-6 border-t-[10px] border-[#1E3A8A]">
         <h2 id="resume-title" className="text-2xl font-bold text-[#1B2430]">Pick up where you left off?</h2>
         <p className="mt-3 text-lg text-gray-700">
-          A session with {pendingResume.players} {pendingResume.players === 1 ? 'player' : 'players'} was saved on this device {formatSavedAt(pendingResume.savedAt)}.
+          {pendingResume.players > 0
+            ? <>A session with {pendingResume.players} {pendingResume.players === 1 ? 'player' : 'players'} was saved on this device {formatSavedAt(pendingResume.savedAt)}.</>
+            : <>Tonight's session ({pendingResume.games} {pendingResume.games === 1 ? 'game' : 'games'}, everyone has left) was saved on this device {formatSavedAt(pendingResume.savedAt)}.</>}
         </p>
         <div className="mt-6 flex flex-col gap-3">
           <button
@@ -36,6 +41,7 @@ const ResumePrompt: React.FC = () => {
           >
             Resume session
           </button>
+          {pendingResume.games > 0 && <p className="text-sm text-gray-500 -mt-1">Start fresh keeps tonight's games under Past nights in Recap.</p>}
           {confirmFresh ? (
             <button
               onClick={discardSavedSession}

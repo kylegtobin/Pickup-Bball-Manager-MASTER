@@ -3,6 +3,7 @@ import { useGame } from '../../context/GameContext';
 import { NightSummary } from '../../types';
 import { nightLeaders, joinNames } from '../../utils/nightStats';
 import { drawRecapCard, downloadBlob, downloadBackup, recapFilename } from '../../utils/recapImage';
+import { useDialogFocus } from '../../utils/useDialogFocus';
 
 const timeOf = (ts: number | null) =>
   ts ? new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : null;
@@ -25,6 +26,10 @@ const RecapModal: React.FC<{ onClose: () => void; isSample?: boolean }> = ({ onC
   const [view, setView] = React.useState<'tonight' | 'confirm' | 'finished'>('tonight');
   const [finished, setFinished] = React.useState<NightSummary | null>(null);
   const [preview, setPreview] = React.useState<string | null>(null);
+  const [finishError, setFinishError] = React.useState<string | null>(null);
+  const [allNights, setAllNights] = React.useState(false);
+  const dialogRef = React.useRef<HTMLDivElement>(null);
+  useDialogFocus(dialogRef);
 
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -56,10 +61,16 @@ const RecapModal: React.FC<{ onClose: () => void; isSample?: boolean }> = ({ onC
   const anythingTonight = gamesPlayed > 0 || playersTonight.length > 0;
 
   const doFinish = () => {
-    const summary = finishNight();
-    if (summary) {
-      setFinished(summary);
+    const result = finishNight();
+    if (result.ok) {
+      setFinishError(null);
+      setFinished(result.summary);
       setView('finished');
+    } else if (result.reason === 'storage') {
+      // Nothing was cleared. Offer the backup so tonight is safe somewhere.
+      setFinishError("This browser wouldn't save tonight, so nothing was cleared. Download a backup to keep tonight's games, then try again.");
+    } else if (result.reason === 'busy') {
+      setFinishError('Finish the shootout first, then finish the night.');
     } else {
       setView('tonight');
     }
@@ -68,7 +79,7 @@ const RecapModal: React.FC<{ onClose: () => void; isSample?: boolean }> = ({ onC
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-auto">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div role="dialog" aria-labelledby="recap-title" className="relative bg-white rounded-xl shadow-xl max-w-2xl w-full p-6 border-t-[10px] border-[#E85A00] my-auto">
+      <div ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="recap-title" className="relative bg-white rounded-xl shadow-xl max-w-2xl w-full p-6 border-t-[10px] border-[#E85A00] my-auto outline-none">
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 id="recap-title" className="text-2xl font-bold text-[#1B2430]">
@@ -164,9 +175,11 @@ const RecapModal: React.FC<{ onClose: () => void; isSample?: boolean }> = ({ onC
           <div className="mt-6 rounded-xl border-2 border-[#E85A00] bg-orange-50 p-4">
             <p className="text-lg font-bold text-[#1B2430]">Finish tonight?</p>
             <p className="text-gray-700 mt-1">This saves tonight's games on this device and clears the courts for next time. Saved names stay. It can't be undone, but the recap and backup stay under Past nights.</p>
-            <div className="mt-4 flex gap-3">
-              <button className={`${btn} bg-[#E85A00] hover:bg-[#C94E00] text-white`} onClick={doFinish}>Yes, finish night</button>
-              <button className={btnLight} onClick={() => setView('tonight')}>Keep playing</button>
+            {finishError && <p role="alert" className="mt-3 font-semibold text-red-700">{finishError}</p>}
+            <div className="mt-4 flex flex-wrap gap-3">
+              <button className={`${btn} bg-[#E85A00] hover:bg-[#C94E00] text-white`} onClick={doFinish}>{finishError ? 'Try again' : 'Yes, finish night'}</button>
+              {finishError && <button className={btnLight} onClick={() => downloadBackup(tonight, { state: gameState })}>Download backup</button>}
+              <button className={btnLight} onClick={() => { setFinishError(null); setView('tonight'); }}>Keep playing</button>
             </div>
           </div>
         )}
@@ -174,8 +187,8 @@ const RecapModal: React.FC<{ onClose: () => void; isSample?: boolean }> = ({ onC
         {!isSample && archive.length > 0 && view !== 'confirm' && (
           <div className="mt-6 border-t border-[#E3E7EC] pt-4">
             <h3 className="font-bold text-[#1B2430] mb-2">Past nights</h3>
-            <ul className="divide-y divide-[#EEF1F4]">
-              {archive.slice(0, 6).map(n => (
+            <ul className={`divide-y divide-[#EEF1F4] ${allNights ? 'max-h-72 overflow-auto pr-1' : ''}`}>
+              {(allNights ? archive : archive.slice(0, 6)).map(n => (
                 <li key={n.id} className="flex items-center justify-between gap-3 py-2">
                   <span className="text-gray-800">
                     <strong>{dayOf(n.startedAt)}</strong>
@@ -188,6 +201,11 @@ const RecapModal: React.FC<{ onClose: () => void; isSample?: boolean }> = ({ onC
                 </li>
               ))}
             </ul>
+            {archive.length > 6 && (
+              <button className="mt-2 text-sm font-semibold text-[#1E3A8A] hover:underline" onClick={() => setAllNights(v => !v)}>
+                {allNights ? 'Show fewer' : `Show all ${archive.length} nights`}
+              </button>
+            )}
           </div>
         )}
       </div>

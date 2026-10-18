@@ -1,6 +1,7 @@
 import React from 'react';
 import { useGame, isPreviousTeam } from '../../context/GameContext';
 import { describeSpot } from '../../utils/spot';
+import { useDialogFocus } from '../../utils/useDialogFocus';
 
 // Courtside sign-in: tap your name, or type a new one. Stays open so the next person can go.
 const SignInSheet: React.FC<{ onClose: () => void; isSample?: boolean }> = ({ onClose, isSample }) => {
@@ -11,6 +12,8 @@ const SignInSheet: React.FC<{ onClose: () => void; isSample?: boolean }> = ({ on
   const [error, setError] = React.useState<string | null>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
   const shownFor = React.useRef<number | null>(null);
+  const cardRef = React.useRef<HTMLDivElement>(null);
+  useDialogFocus(cardRef);
 
   React.useEffect(() => { inputRef.current?.focus(); }, []);
 
@@ -64,14 +67,16 @@ const SignInSheet: React.FC<{ onClose: () => void; isSample?: boolean }> = ({ on
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!q) return;
-    if (shown.length === 1 && !typedIsNew) signIn(shown[0].name);
-    else if (exact) signIn(exact.name);
+    // Enter picks the saved name (the highlighted first match). It only adds a new person when
+    // no saved name matches, so a half-typed name never becomes a second identity.
+    if (exact) signIn(exact.name);
+    else if (shown.length > 0) signIn(shown[0].name);
     else signIn(query.trim());
   };
 
   return (
     <div className={`fixed inset-0 z-[55] bg-black/40 flex items-start justify-center px-4 pb-4 overflow-auto ${isSample ? 'pt-20' : 'pt-4'}`} role="dialog" aria-modal="true" aria-label="Sign in">
-      <div className="w-full max-w-3xl mt-6 bg-white rounded-2xl shadow-2xl overflow-hidden">
+      <div ref={cardRef} tabIndex={-1} className="w-full max-w-3xl mt-6 bg-white rounded-2xl shadow-2xl overflow-hidden outline-none">
         <div className="flex items-center justify-between px-6 pt-5 pb-3">
           <h2 className="text-3xl font-extrabold text-[#1B2430]">Sign in</h2>
           <div className="flex items-center gap-2">
@@ -111,7 +116,7 @@ const SignInSheet: React.FC<{ onClose: () => void; isSample?: boolean }> = ({ on
             <p className="mt-3 text-base font-semibold text-red-700">{error}</p>
           ) : (
             <p className="mt-3 text-base text-gray-500">
-              {regulars.length === 0
+              {q && shown.length > 0 && !exact ? `Press Enter for ${shown[0].name}, or tap a name.` : regulars.length === 0
                 ? 'No saved names yet. Type your name to add yourself. Next time you can just tap it.'
                 : 'Tap your name. New here? Type your name and add yourself.'}
             </p>
@@ -120,16 +125,7 @@ const SignInSheet: React.FC<{ onClose: () => void; isSample?: boolean }> = ({ on
 
         <div className="px-6 pb-6 pt-2 max-h-[55vh] overflow-auto">
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-            {typedIsNew && (
-              <button
-                type="button"
-                onClick={() => signIn(query.trim())}
-                className="col-span-2 sm:col-span-3 lg:col-span-4 min-h-[3.5rem] px-4 rounded-xl border-2 border-dashed border-[#1E3A8A] text-[#1E3A8A] text-xl font-bold hover:bg-blue-50 text-left"
-              >
-                + Add "{query.trim()}" as a new player
-              </button>
-            )}
-            {shown.map(r => (
+            {shown.map((r, i) => (
               <div key={r.id} className="relative">
                 <button
                   type="button"
@@ -137,7 +133,7 @@ const SignInSheet: React.FC<{ onClose: () => void; isSample?: boolean }> = ({ on
                   disabled={editing}
                   className={`w-full min-h-[3.5rem] px-3 rounded-xl border text-xl font-bold truncate ${
                     editing ? 'bg-gray-50 border-[#D5DAE1] text-gray-500' : 'bg-white border-[#D5DAE1] text-[#1B2430] hover:border-[#1E3A8A] hover:bg-blue-50 active:bg-blue-100'
-                  }`}
+                  } ${q && i === 0 && !editing ? 'ring-4 ring-[#F5B301] border-[#F5B301]' : ''}`}
                 >
                   {r.name}
                 </button>
@@ -154,6 +150,15 @@ const SignInSheet: React.FC<{ onClose: () => void; isSample?: boolean }> = ({ on
                 )}
               </div>
             ))}
+            {typedIsNew && (
+              <button
+                type="button"
+                onClick={() => signIn(query.trim())}
+                className="col-span-2 sm:col-span-3 lg:col-span-4 min-h-[3.5rem] px-4 rounded-xl border-2 border-dashed border-[#1E3A8A] text-[#1E3A8A] text-xl font-bold hover:bg-blue-50 text-left"
+              >
+                + Add "{query.trim()}" as a new player{shown.length > 0 ? ' (someone new)' : ''}
+              </button>
+            )}
           </div>
           {regulars.length > 0 && shown.length === 0 && !typedIsNew && (
             <p className="text-base text-gray-500 mt-2">Everyone saved on this device is already signed in.</p>
