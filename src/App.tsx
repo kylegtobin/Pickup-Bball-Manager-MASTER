@@ -15,6 +15,7 @@ import { createSample, isSampleLink } from './sample/sampleGame';
 import ScreenSizeNote from './components/ui/ScreenSizeNote';
 import ResumePrompt from './components/modal/ResumePrompt';
 import ArrangeBar from './components/ArrangeBar';
+import Scoreboard from './components/Scoreboard';
 import CourtView from './components/CourtView';
 import RecapModal from './components/modal/RecapModal';
 import SignInSheet from './components/modal/SignInSheet';
@@ -307,10 +308,11 @@ function PickupBasketballApp({ sample, onTrySample }: PickupBasketballAppProps) 
                         <ul className="list-disc pl-6 mb-3">
                           <li>✅ First to <strong>11 points</strong>, must <strong>win by 2</strong></li>
                           <li>🎯 If no lead by 2 when a team hits <strong>15</strong>, the <strong>first to 15</strong> wins</li>
-                          <li><strong>Scoring:</strong></li>
+                          <li>⏱️ Games are <strong>12 minutes</strong>. When time runs out, the <strong>team ahead wins</strong>. If it's tied, <strong>next bucket wins</strong>.</li>
+                          <li><strong>Scoring is 1s and 2s:</strong></li>
                           <ul className="list-disc pl-12">
-                            <li><strong>2-point baskets</strong> = 1 point</li>
-                            <li><strong>3-point baskets</strong> = 2 points</li>
+                            <li>Buckets inside the arc count <strong>1</strong></li>
+                            <li>Threes count <strong>2</strong></li>
                           </ul>
                           <li>🚫 <strong>No free throws</strong> — if fouled on a shot, your team keeps the ball</li>
                           <li>🫱 Players <strong>call their own fouls</strong> — <strong>play fair and be respectful</strong></li>
@@ -364,6 +366,17 @@ function PickupBasketballApp({ sample, onTrySample }: PickupBasketballAppProps) 
                           <li>After a game, click the <strong>Champions Won</strong> or <strong>Challengers Won</strong> buttons at the top of the page.</li>
                           <li>Winners stay, losers queue up, and the next 5 Challengers are filled automatically, with a three-point shootout pop-up appearing when required.</li>
                           <li>Tapped the wrong button? Click <strong>Undo</strong> to step back one change at a time. It still works after a refresh.</li>
+                        </ul>
+
+                        <hr className="my-6 border-t border-gray-300" />
+
+                        <h3 className="text-xl font-bold mb-4">🏀 Keeping Score</h3>
+                        <ul className="list-disc pl-6 mb-6">
+                          <li>When both teams have 5, the scoreboard shows above the teams. Tap <strong>Start</strong> at tip-off; tap again to pause.</li>
+                          <li>Tap <strong>+1</strong> for a bucket and <strong>+2</strong> for a three. Undo takes back the last basket.</li>
+                          <li>The app knows the rules: first to 11 win by 2, first to 15, and at 12:00 the team ahead wins (tied means next bucket wins). When a team wins it asks you to <strong>Record result</strong>, which rotates the line.</li>
+                          <li>Mis-tap? Use <strong>Fix score</strong> or <strong>Correct score</strong>. Forgot to start the clock? Pause it and use <strong>Adjust time</strong>.</li>
+                          <li>Not keeping score tonight? Ignore it and use the Champions Won / Challengers Won buttons like always.</li>
                         </ul>
 
                         <hr className="my-6 border-t border-gray-300" />
@@ -611,7 +624,11 @@ function PickupBasketballApp({ sample, onTrySample }: PickupBasketballAppProps) 
           </div>
         </div>
 
-        <ArrangeBar stickyTop={sample ? 'top-[76px]' : 'top-2'} />
+        {/* Scoreboard and the arranging bar stay in view while scrolling */}
+        <div className={`sticky ${sample ? 'top-[76px]' : 'top-2'} z-40`}>
+          <Scoreboard stickyTop="" />
+          <ArrangeBar stickyTop="" />
+        </div>
 
         <div className="grid grid-cols-2 gap-6 mb-4">
           <div className="mb-0 flex gap-3">
