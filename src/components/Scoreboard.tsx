@@ -2,6 +2,14 @@ import React from 'react';
 import { useGame } from '../context/GameContext';
 import { decide, timeLeft, clockState, formatClock, endedByText, Side } from '../utils/score';
 import { useDialogFocus } from '../utils/useDialogFocus';
+import { useWakeLock } from '../utils/useWakeLock';
+
+// Typing in a box, or another dialog open (court view excepted), means keys aren't for the scoreboard
+const keysFree = () => {
+  const a = document.activeElement as HTMLElement | null;
+  if (a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.tagName === 'SELECT' || a.isContentEditable)) return false;
+  return !document.querySelector('[aria-modal="true"]:not([aria-label="Court view"])');
+};
 
 const useTick = (on: boolean) => {
   const [, setN] = React.useState(0);
@@ -43,6 +51,27 @@ const Scoreboard: React.FC<{ stickyTop: string }> = ({ stickyTop }) => {
   const showPopup = gameOn && !!decidedKey && !fixing && dismissed !== decidedKey && !recording;
   const popupRef = React.useRef<HTMLDivElement>(null);
   useDialogFocus(popupRef, showPopup);
+  useWakeLock(gameOn && state === 'running');
+
+  // Runner shortcuts on a laptop: Q/W score for the Champions, O/P for the Challengers, Space starts or pauses
+  const live = React.useRef({ gameOn, state, decided: !!outcome.winner, fixing });
+  live.current = { gameOn, state, decided: !!outcome.winner, fixing };
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey || !keysFree()) return;
+      const { gameOn: on, state: st, decided: dec, fixing: fix } = live.current;
+      if (!on) return;
+      const k = e.key.toLowerCase();
+      const map: Record<string, [Side, number]> = { q: ['champions', 1], w: ['champions', 2], o: ['challengers', 1], p: ['challengers', 2] };
+      if (map[k]) { e.preventDefault(); addPoints(map[k][0], map[k][1], fix); return; }
+      if (e.code === 'Space' && !dec) {
+        e.preventDefault();
+        if (st === 'running') pauseClock(); else if (st === 'not-started' || st === 'paused') startClock();
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [addPoints, startClock, pauseClock]);
 
   if (!gameOn) return null;
 
@@ -78,6 +107,7 @@ const Scoreboard: React.FC<{ stickyTop: string }> = ({ stickyTop }) => {
         onClick={() => addPoints(side, n, fixing)}
         disabled={scoringOff}
         aria-label={`Add ${n} for the ${t.name}`}
+        title={`+${n} ${t.name} (key ${side === 'champions' ? (n === 1 ? 'Q' : 'W') : (n === 1 ? 'O' : 'P')})`}
         className={`w-14 h-12 rounded-lg text-xl font-extrabold text-white transition-colors ${scoringOff ? 'opacity-30 cursor-not-allowed' : t.hover}`}
         style={{ backgroundColor: t.solid }}
       >
@@ -135,6 +165,7 @@ const Scoreboard: React.FC<{ stickyTop: string }> = ({ stickyTop }) => {
                 </button>
               )}
             </div>
+            <div className="hidden lg:block text-xs text-white/40">Keys: Q / W Champions · Space clock · O / P Challengers · Ctrl+Z undo</div>
             {adjusting && (
               <div className="flex gap-2 mt-1">
                 {[[-60000, '−1:00'], [-10000, '−0:10'], [10000, '+0:10'], [60000, '+1:00']].map(([d, label]) => (

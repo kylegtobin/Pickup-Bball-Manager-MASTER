@@ -4,6 +4,7 @@ import { Player } from '../types';
 import { previewNextUp } from '../utils/formChallengers';
 import { decide, timeLeft, clockState, formatClock as formatCountdown, endedByText } from '../utils/score';
 import { useDialogFocus } from '../utils/useDialogFocus';
+import { useWakeLock } from '../utils/useWakeLock';
 
 const formatClock = (ms: number) => {
   const total = Math.max(0, Math.floor(ms / 1000));
@@ -106,6 +107,7 @@ const CourtView: React.FC<{ onClose: () => void; isSample?: boolean }> = ({ onCl
   const [recording, setRecording] = React.useState(false);
   const rootRef = React.useRef<HTMLDivElement>(null);
   useDialogFocus(rootRef);
+  useWakeLock(true); // a TV or tablet showing court view shouldn't go to sleep
   React.useEffect(() => { setFixing(false); setRecording(false); }, [gameState.games.length]);
   const { champions, challengers, waitingQueue, gameStartTime, championStreak, score, clock } = gameState;
   const [controls, setControls] = React.useState(false);
