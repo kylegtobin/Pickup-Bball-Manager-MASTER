@@ -542,3 +542,29 @@ describe('audit fixes', () => {
     unmount();
   });
 });
+
+describe('restoring backups', () => {
+  test('a restored night goes into past nights without touching tonight', () => {
+    const { result, unmount } = setup({ persistKey: KEY });
+    signIn(result, NAMES.slice(0, 3));
+    act(() => { result.current.restoreNight({ id: 'old', startedAt: 1, endedAt: 2, gamesPlayed: 4, playersTonight: ['Zed'], bestStreak: null, games: [] }); });
+    expect(result.current.archive.map(n => n.id)).toEqual(['old']);
+    expect(names(result.current.gameState.champions)).toEqual(NAMES.slice(0, 3));
+    unmount();
+  });
+
+  test('picking a night back up only works when nothing is in progress', () => {
+    const { result, unmount } = setup({ persistKey: KEY });
+    const backup = { champions: [{ id: 'z', name: 'Zed' }], challengers: [], waitingQueue: [], status: 'WAITING_FOR_PLAYERS' } as unknown as GameState;
+    signIn(result, ['Avery']);
+    let ok = true;
+    act(() => { ok = result.current.resumeFromBackup(backup); });
+    expect(ok).toBe(false);
+    expect(names(result.current.gameState.champions)).toEqual(['Avery']);
+    act(() => { result.current.finishNight(); });
+    act(() => { ok = result.current.resumeFromBackup(backup); });
+    expect(ok).toBe(true);
+    expect(names(result.current.gameState.champions)).toEqual(['Zed']);
+    unmount();
+  });
+});

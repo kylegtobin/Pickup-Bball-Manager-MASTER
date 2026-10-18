@@ -123,6 +123,9 @@ export interface GameContextProps {
   // Finish night: archive tonight on this device and clear the courts
   finishNight: () => { ok: true; summary: NightSummary } | { ok: false; reason: 'nothing' | 'busy' | 'storage' };
   archive: NightSummary[];
+  // Backups: add a night to Past nights, or pick a night back up when nothing is in progress
+  restoreNight: (night: NightSummary) => boolean;
+  resumeFromBackup: (state: GameState) => boolean;
 }
 
 const defaultGameState: GameState = {
@@ -1527,6 +1530,24 @@ export function GameProvider({ children, initialState, persistKey, initialRegula
     return { ok: true, summary };
   }, [gameState, archiveNight, stopGameTimer]);
 
+  // Add a restored night to Past nights (never touches tonight)
+  const restoreNight = useCallback((night: NightSummary) => archiveNight(night), [archiveNight]);
+
+  // Pick a backed-up night back up, only when no night is in progress, so it can't overwrite one
+  const resumeFromBackup = useCallback((state: GameState): boolean => {
+    if (hasNight(stateRef.current) || savedSession) return false;
+    const merged: GameState = { ...defaultGameState, ...state };
+    if (!isStable(merged.status) || merged.status === 'SHOOTOUT') merged.status = merged.champions.length === 5 && merged.challengers.length === 5 ? 'READY' : 'WAITING_FOR_PLAYERS';
+    const c = merged.clock;
+    merged.clock = c.runningSince === null ? c : { ...c, runningSince: null };
+    merged.showShootoutModal = false;
+    restoringRef.current = true;
+    historyRef.current = [];
+    setHistory([]);
+    setGameState(merged);
+    return true;
+  }, [savedSession]);
+
   const value: GameContextProps = {
     gameState,
     setGameState,
@@ -1566,6 +1587,8 @@ export function GameProvider({ children, initialState, persistKey, initialRegula
     otherTabOpen: otherTabs.length > 0,
     finishNight,
     archive,
+    restoreNight,
+    resumeFromBackup,
   };
 
   return (
