@@ -55,6 +55,7 @@ const PlayerSlot: React.FC<PlayerSlotProps> = ({
         justifyContent: 'center',
         width: '100%'
       }}
+      data-player-id={player?.id}
       role={manualMode ? 'button' : undefined}
       aria-pressed={manualMode && player ? selected : undefined}
       onClick={manualMode ? onClick : undefined}
