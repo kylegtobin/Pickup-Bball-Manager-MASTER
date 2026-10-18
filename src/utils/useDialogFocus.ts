@@ -1,4 +1,5 @@
 import { RefObject, useEffect } from 'react';
+import { isShown } from './visibility';
 
 // Only the most recently opened dialog keeps focus
 const stack: HTMLElement[] = [];
@@ -14,12 +15,15 @@ export const useDialogFocus = (ref: RefObject<HTMLElement>, active = true) => {
     if (!active || !el) return;
     const before = document.activeElement as HTMLElement | null;
     stack.push(el);
-    if (!el.contains(document.activeElement)) {
+    // A dialog inside the hidden real night (behind an open sample) never takes focus
+    if (isShown(el) && !el.contains(document.activeElement)) {
       const first = el.querySelector<HTMLElement>('[data-autofocus]') ?? focusables(el)[0] ?? el;
       first.focus();
     }
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Tab' || stack[stack.length - 1] !== el) return;
+      if (e.key !== 'Tab') return;
+      const top = [...stack].reverse().find(isShown);
+      if (top !== el) return;
       const list = focusables(el);
       if (list.length === 0) { e.preventDefault(); el.focus(); return; }
       const first = list[0];

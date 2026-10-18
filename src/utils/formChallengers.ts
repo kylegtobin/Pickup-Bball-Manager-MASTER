@@ -10,6 +10,8 @@ export interface ChallengerPlan {
   shootout: { team: PreviousTeam; spots: number } | null;
   // Everything still waiting after the picked players (and after the shootout group, if any)
   rest: WaitingQueueItem[];
+  // People sitting out whose turn came while they were away. They go to the end of the line.
+  passed: Player[];
 }
 
 /**
@@ -18,25 +20,32 @@ export interface ChallengerPlan {
  * If the next group is bigger than the open spots, that group shoots for them.
  * Used by the game rules (GameContext) and by the court view's "next up" preview.
  */
+// Someone sitting out keeps their place in line, but if their turn comes while they're away it passes:
+// they're skipped and go to the end of the line. A group member who's away misses the group's turn.
 export const planChallengers = (queue: WaitingQueueItem[], size = 5): ChallengerPlan => {
   const picked: Player[] = [];
+  const passed: Player[] = [];
   let i = 0;
   while (picked.length < size && i < queue.length) {
     const item = queue[i];
     if (!isGroup(item)) {
-      picked.push({ ...item });
+      if (item.away) passed.push(item);
+      else picked.push({ ...item });
       i++;
       continue;
     }
+    const here = item.players.filter(p => !p.away);
+    const gone = item.players.filter(p => p.away);
     const spots = size - picked.length;
-    if (item.players.length <= spots) {
-      picked.push(...item.players.map(p => ({ ...p })));
+    passed.push(...gone);
+    if (here.length <= spots) {
+      picked.push(...here.map(p => ({ ...p })));
       i++;
       continue;
     }
-    return { picked, shootout: { team: item, spots }, rest: queue.slice(i + 1) };
+    return { picked, shootout: { team: gone.length ? { ...item, players: here } : item, spots }, rest: queue.slice(i + 1), passed };
   }
-  return { picked, shootout: null, rest: queue.slice(i) };
+  return { picked, shootout: null, rest: queue.slice(i), passed };
 };
 
 export const LOSERS_GROUP_ID = '__this_games_losers__';

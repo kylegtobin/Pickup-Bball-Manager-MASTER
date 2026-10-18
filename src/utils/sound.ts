@@ -2,12 +2,13 @@
 // Off unless someone turns them on for this screen. Made in the browser, no audio files.
 const KEY = 'pbm-sound';
 
-export const soundPref = (): boolean => {
-  try { return window.localStorage.getItem(KEY) === '1'; } catch { return false; }
+// screen: '' for court view on the main screen, '-tv' for the second-screen window
+export const soundPref = (screen = ''): boolean => {
+  try { return window.localStorage.getItem(KEY + screen) === '1'; } catch { return false; }
 };
 
-export const setSoundPref = (on: boolean) => {
-  try { window.localStorage.setItem(KEY, on ? '1' : '0'); } catch { /* blocked */ }
+export const setSoundPref = (on: boolean, screen = '') => {
+  try { window.localStorage.setItem(KEY + screen, on ? '1' : '0'); } catch { /* blocked */ }
 };
 
 let ctx: AudioContext | null = null;
