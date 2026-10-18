@@ -23,7 +23,8 @@ import { describeSpot } from './utils/spot';
 import { useToast } from './components/ui/Toast';
 import SittingOut from './components/queue/SittingOut';
 import TvWindow from './components/TvWindow';
-import { isTvLink, openTvWindow, tvSupported, useTvBroadcast } from './utils/tvLink';
+import { isTvLink, openTvWindow, tvSupported, useTvBroadcast, TV_BLOCKED_MESSAGE } from './utils/tvLink';
+import { blockingDialogOpen, typing } from './utils/visibility';
 import './App.css';
 
 // Where the real session is saved on this device. The sample never saves.
@@ -147,9 +148,7 @@ function PickupBasketballApp({ sample, onTrySample, active }: PickupBasketballAp
     const onKey = (e: KeyboardEvent) => {
       if (!activeRef.current) return; // a hidden real night never reacts to keys meant for the sample
       if (!(e.metaKey || e.ctrlKey) || e.shiftKey || e.key.toLowerCase() !== 'z') return;
-      const a = document.activeElement as HTMLElement | null;
-      if (a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.isContentEditable)) return;
-      if (document.querySelector('[aria-modal="true"]:not([aria-label="Court view"])')) return;
+      if (typing() || blockingDialogOpen()) return;
       e.preventDefault();
       undoRef.current();
     };
@@ -193,7 +192,7 @@ function PickupBasketballApp({ sample, onTrySample, active }: PickupBasketballAp
 
   // Saved names that match what's typed, for one-tap sign-in from the box
   const signedIn = new Set(
-    [...champions, ...challengers, ...gameState.waitingQueue.flatMap(i => ('players' in i ? i.players : [i]))].map(p => p.name.toLowerCase())
+    [...champions, ...challengers, ...gameState.waitingQueue.flatMap(i => ('players' in i ? i.players : [i]))].filter(p => !p.away).map(p => p.name.toLowerCase())
   );
   const typed = newPlayerName.trim().toLowerCase();
   const suggestions = typed
@@ -450,7 +449,7 @@ function PickupBasketballApp({ sample, onTrySample, active }: PickupBasketballAp
                               <li>Drag a player, or tap a player and then tap where they go: an <strong>Open spot</strong> on a team or a <strong>Move here</strong> spot in the line.</li>
                               <li>Tap a previous team's name to move the whole group.</li>
                               <li><strong>Swap:</strong> tap a player, then tap a player on court (or, for someone on court, a player in line). The two trade places, which is how you sub someone in.</li>
-                              <li><strong>Sit out:</strong> tap a player, then <strong>Sit out</strong>. They move to a Sitting out list and keep their name. <strong>Back</strong> returns them to their open spot or their place in line (otherwise the end of the line). Signing in again does the same. <strong>Left</strong> means they went home.</li>
+                              <li><strong>Sit out:</strong> tap a player, then <strong>Sit out</strong>. Someone waiting in line stays in their place, greyed out; if their turn comes while they're out, they're skipped and move to the end of the line. Someone on court opens their spot; <strong>Back</strong> returns them to it during the same game if nobody has taken it, otherwise to the end of the line. Signing in again works like Back. <strong>Left</strong> means they went home.</li>
                               <li>Perfect for special situations: injured players, someone needing to move back in the queue for a phone call, or friends wanting to play together.</li>
                               <li>Tap <strong>Done</strong> when finished arranging.</li>
                             </ul>
@@ -615,7 +614,7 @@ function PickupBasketballApp({ sample, onTrySample, active }: PickupBasketballAp
             </button>
             {tvSupported() && (
               <button
-                onClick={() => openTvWindow()}
+                onClick={() => { if (!openTvWindow()) toast(TV_BLOCKED_MESSAGE, 'error'); }}
                 className="inline-flex items-center gap-2 px-3 xl:px-4 py-2 rounded-lg border border-[#D5DAE1] bg-white hover:bg-gray-100 text-base font-semibold"
                 title="Open court view in its own window for a TV or projector. It follows this screen."
                 aria-label="Second screen"
@@ -675,7 +674,7 @@ function PickupBasketballApp({ sample, onTrySample, active }: PickupBasketballAp
 
         {/* Scoreboard and the arranging bar stay in view while scrolling */}
         <div className={`sticky ${sample ? 'top-[76px]' : 'top-2'} z-40`}>
-          <Scoreboard stickyTop="" active={active} />
+          <Scoreboard stickyTop="" active={active} quietPopup={courtViewOpen} />
           <ArrangeBar stickyTop="" />
         </div>
 
