@@ -254,6 +254,7 @@ const WaitingQueue: React.FC = () => {
                   justifyContent: 'center',
                   width: '100%'
                 }}
+                data-player-id={item.id}
                 role={manualMode ? 'button' : undefined}
                 aria-pressed={manualMode ? selectedPlayerId === item.id : undefined}
                 onClick={manualMode ? () => setSelectedPlayerId(selectedPlayerId === item.id ? null : item.id) : undefined}

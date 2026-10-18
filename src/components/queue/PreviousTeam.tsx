@@ -172,6 +172,7 @@ const PreviousTeam: React.FC<PreviousTeamProps> = ({
               justifyContent: 'center',
               width: '100%'
             }}
+            data-player-id={player.id}
             role={manualMode ? 'button' : undefined}
             aria-pressed={manualMode ? selectedPlayerId === player.id : undefined}
             onClick={manualMode ? (e) => { e.stopPropagation(); toggleSelect(player.id); } : undefined}
