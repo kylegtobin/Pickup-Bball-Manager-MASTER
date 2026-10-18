@@ -125,6 +125,22 @@ function PickupBasketballApp({ sample, onTrySample }: PickupBasketballAppProps) 
     undo();
     toast(`Undone: ${label}`, 'info');
   };
+
+  // Ctrl+Z / Cmd+Z undoes, unless someone is typing or a dialog other than court view is open
+  const undoRef = React.useRef(handleUndo);
+  undoRef.current = handleUndo;
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.shiftKey || e.key.toLowerCase() !== 'z') return;
+      const a = document.activeElement as HTMLElement | null;
+      if (a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.isContentEditable)) return;
+      if (document.querySelector('[aria-modal="true"]:not([aria-label="Court view"])')) return;
+      e.preventDefault();
+      undoRef.current();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
   
   const { champions, challengers } = gameState;
   const isEmpty = champions.length === 0 && challengers.length === 0 && gameState.waitingQueue.length === 0;
@@ -376,6 +392,8 @@ function PickupBasketballApp({ sample, onTrySample }: PickupBasketballAppProps) 
                           <li>Tap <strong>+1</strong> for a bucket and <strong>+2</strong> for a three. Undo takes back the last basket.</li>
                           <li>The app knows the rules: first to 11 win by 2, first to 15, and at 12:00 the team ahead wins (tied means next bucket wins). When a team wins it asks you to <strong>Record result</strong>, which rotates the line.</li>
                           <li>Mis-tap? Use <strong>Fix score</strong> or <strong>Correct score</strong>. Forgot to start the clock? Pause it and use <strong>Adjust time</strong>.</li>
+                          <li>On a laptop, keys work too: <strong>Q</strong>/<strong>W</strong> add 1/2 for the Champions, <strong>O</strong>/<strong>P</strong> for the Challengers, <strong>Space</strong> starts or pauses the clock, and <strong>Ctrl+Z</strong> (Cmd+Z on a Mac) undoes.</li>
+                          <li>The screen stays awake while the clock runs and while court view is open.</li>
                           <li>Not keeping score tonight? Ignore it and use the Champions Won / Challengers Won buttons like always.</li>
                         </ul>
 
@@ -386,6 +404,7 @@ function PickupBasketballApp({ sample, onTrySample }: PickupBasketballAppProps) 
                           <li><strong>Court View</strong> shows who's playing, the game clock, and who's up next, including any upcoming shootout. Use <strong>Full screen</strong> on a TV or tablet.</li>
                           <li><strong>Recap</strong> (top menu) shows games played, players tonight, the longest win streak, and who had the most wins and games. Download a recap image for the group chat or a backup of the night.</li>
                           <li>At the end of the night, click <strong>Finish night</strong> in Recap. Tonight is saved under <strong>Past nights</strong> on this device and the courts clear for next time.</li>
+                          <li>Recap lists every game (who won, the score, who played, any shootout). <strong>Restore a backup</strong> adds a backed-up night to Past nights, or picks it back up when nothing is in progress.</li>
                         </ul>
 
                         <hr className="my-6 border-t border-gray-300" />
