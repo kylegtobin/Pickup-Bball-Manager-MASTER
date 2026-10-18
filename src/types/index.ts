@@ -46,6 +46,14 @@ export interface GameRecord {
   endedBy?: EndedBy;
 }
 
+// Someone stepping off for a bit (water, a call, a tweak). They keep their name, not their spot on court.
+export interface SittingOut {
+  player: Player;
+  at: number; // When they sat down
+  from: 'champions' | 'challengers' | 'line';
+  index: number; // Their place in line when they sat down (line only)
+}
+
 export interface PreviousTeam {
   type: 'PreviousTeam';
   id: string;
@@ -100,6 +108,7 @@ export interface GameState {
   playersTonight: string[]; // Everyone who signed in tonight, even if they left
   games: GameRecord[]; // Every finished game tonight, in order
   nightId: string | null; // Stable id for tonight, set at the first sign-in
+  sittingOut: SittingOut[]; // Here tonight but off the court and out of the line for now
   // Scoreboard for the game being played
   score: Score;
   clock: Clock;
