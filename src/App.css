@@ -227,3 +227,25 @@ input:checked + .toggle-slider:before {
 @media (prefers-reduced-motion: reduce) {
   .pbm-just-added { animation: none; box-shadow: 0 0 0 4px #F5B301; }
 }
+
+/* Court view: a win gets confetti, a heater streak glows */
+@keyframes pbm-confetti {
+  0% { transform: translateY(-12vh) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(112vh) rotate(720deg); opacity: 0.85; }
+}
+.pbm-confetti { position: absolute; top: 0; width: 12px; height: 18px; border-radius: 2px; animation-name: pbm-confetti; animation-timing-function: linear; animation-fill-mode: both; }
+@keyframes pbm-pop {
+  0% { transform: scale(0.6); opacity: 0; }
+  60% { transform: scale(1.05); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.pbm-pop { animation: pbm-pop 0.6s cubic-bezier(0.2, 0.9, 0.3, 1.2) both; }
+@keyframes pbm-heater {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(232, 90, 0, 0.7); }
+  50% { box-shadow: 0 0 18px 4px rgba(245, 179, 1, 0.8); }
+}
+.pbm-heater { animation: pbm-heater 1.6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .pbm-confetti { display: none; }
+  .pbm-pop, .pbm-heater { animation: none; }
+}

@@ -21,6 +21,9 @@ import RecapModal from './components/modal/RecapModal';
 import SignInSheet from './components/modal/SignInSheet';
 import { describeSpot } from './utils/spot';
 import { useToast } from './components/ui/Toast';
+import SittingOut from './components/queue/SittingOut';
+import TvWindow from './components/TvWindow';
+import { isTvLink, openTvWindow, tvSupported, useTvBroadcast } from './utils/tvLink';
 import './App.css';
 
 // Where the real session is saved on this device. The sample never saves.
@@ -31,6 +34,12 @@ const REAL_SESSION_KEY = 'pbm-session-v1';
 // (same rules code, separate in-memory state) and the real one is only hidden,
 // so opening, resetting or exiting a sample can never change a real session.
 function App() {
+  // The second-screen window only shows court view and follows the main screen
+  if (isTvLink()) return <TvWindow />;
+  return <MainApp />;
+}
+
+function MainApp() {
   const [sampleOpen, setSampleOpen] = React.useState<boolean>(isSampleLink);
   const [sampleRun, setSampleRun] = React.useState(0);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -49,7 +58,7 @@ function App() {
       <div hidden={sampleOpen}>
         <ToastProvider>
           <GameProvider persistKey={REAL_SESSION_KEY}>
-            <PickupBasketballApp onTrySample={() => setSampleOpen(true)} />
+            <PickupBasketballApp onTrySample={() => setSampleOpen(true)} active={!sampleOpen} />
           </GameProvider>
         </ToastProvider>
       </div>
@@ -58,6 +67,7 @@ function App() {
           <GameProvider initialState={sampleSetup.state} initialRegulars={sampleSetup.regulars}>
             <PickupBasketballApp
               sample={{ onReset: () => setSampleRun(run => run + 1), onExit: exitSample }}
+              active
             />
           </GameProvider>
         </ToastProvider>
@@ -95,10 +105,11 @@ function SampleBanner({ onReset, onExit }: { onReset: () => void; onExit: () => 
 interface PickupBasketballAppProps {
   sample?: { onReset: () => void; onExit: () => void };
   onTrySample?: () => void;
+  active: boolean; // false for the real night while it's hidden behind an open sample
 }
 
 // Inner component with access to context
-function PickupBasketballApp({ sample, onTrySample }: PickupBasketballAppProps) {
+function PickupBasketballApp({ sample, onTrySample, active }: PickupBasketballAppProps) {
   const { 
     gameState, 
     addPlayer, 
@@ -118,6 +129,7 @@ function PickupBasketballApp({ sample, onTrySample }: PickupBasketballAppProps) 
     lastAdded
   } = useGame();
   const { toast } = useToast();
+  useTvBroadcast(gameState, !!sample, active);
 
   const handleUndo = () => {
     if (!canUndo) return;
@@ -129,8 +141,11 @@ function PickupBasketballApp({ sample, onTrySample }: PickupBasketballAppProps) 
   // Ctrl+Z / Cmd+Z undoes, unless someone is typing or a dialog other than court view is open
   const undoRef = React.useRef(handleUndo);
   undoRef.current = handleUndo;
+  const activeRef = React.useRef(active);
+  activeRef.current = active;
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (!activeRef.current) return; // a hidden real night never reacts to keys meant for the sample
       if (!(e.metaKey || e.ctrlKey) || e.shiftKey || e.key.toLowerCase() !== 'z') return;
       const a = document.activeElement as HTMLElement | null;
       if (a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.isContentEditable)) return;
@@ -402,6 +417,8 @@ function PickupBasketballApp({ sample, onTrySample }: PickupBasketballAppProps) 
                         <h3 className="text-xl font-bold mb-4">📺 Court View & Recap</h3>
                         <ul className="list-disc pl-6 mb-6">
                           <li><strong>Court View</strong> shows who's playing, the game clock, and who's up next, including any upcoming shootout. Use <strong>Full screen</strong> on a TV or tablet.</li>
+                          <li><strong>Second screen</strong> opens court view in its own window. Drag it onto the TV or projector and click Full screen. It follows the main screen, so the runner keeps working as normal.</li>
+                          <li>Court view celebrates each win (with the score and any streak) and turns a shootout into a big spotlight. <strong>Sound</strong> is off unless you turn it on for that screen: a horn at 0:00 and a chime for a win.</li>
                           <li><strong>Recap</strong> (top menu) shows games played, players tonight, the longest win streak, and who had the most wins and games. Download a recap image for the group chat or a backup of the night.</li>
                           <li>At the end of the night, click <strong>Finish night</strong> in Recap. Tonight is saved under <strong>Past nights</strong> on this device and the courts clear for next time.</li>
                           <li>Recap lists every game (who won, the score, who played, any shootout). <strong>Restore a backup</strong> adds a backed-up night to Past nights, or picks it back up when nothing is in progress.</li>
@@ -432,6 +449,8 @@ function PickupBasketballApp({ sample, onTrySample }: PickupBasketballAppProps) 
                               <li>Activates automatically if a player is removed from Champions or Challengers.</li>
                               <li>Drag a player, or tap a player and then tap where they go: an <strong>Open spot</strong> on a team or a <strong>Move here</strong> spot in the line.</li>
                               <li>Tap a previous team's name to move the whole group.</li>
+                              <li><strong>Swap:</strong> tap a player, then tap a player on court (or, for someone on court, a player in line). The two trade places, which is how you sub someone in.</li>
+                              <li><strong>Sit out:</strong> tap a player, then <strong>Sit out</strong>. They move to a Sitting out list and keep their name. <strong>Back</strong> returns them to their open spot or their place in line (otherwise the end of the line). Signing in again does the same. <strong>Left</strong> means they went home.</li>
                               <li>Perfect for special situations: injured players, someone needing to move back in the queue for a phone call, or friends wanting to play together.</li>
                               <li>Tap <strong>Done</strong> when finished arranging.</li>
                             </ul>
@@ -588,12 +607,23 @@ function PickupBasketballApp({ sample, onTrySample }: PickupBasketballAppProps) 
             />
             <button
               onClick={() => setCourtViewOpen(true)}
-              className="ml-4 inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-[#D5DAE1] bg-white hover:bg-gray-100 text-base font-semibold"
+              className="ml-2 xl:ml-4 inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-[#D5DAE1] bg-white hover:bg-gray-100 text-base font-semibold"
               title="Big-screen view of who's playing and who's next"
             >
               <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="13" rx="2" /><path d="M8 21h8M12 17v4" /></svg>
               Court view
             </button>
+            {tvSupported() && (
+              <button
+                onClick={() => openTvWindow()}
+                className="inline-flex items-center gap-2 px-3 xl:px-4 py-2 rounded-lg border border-[#D5DAE1] bg-white hover:bg-gray-100 text-base font-semibold"
+                title="Open court view in its own window for a TV or projector. It follows this screen."
+                aria-label="Second screen"
+              >
+                <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="3" width="13" height="9" rx="1.5" /><rect x="10" y="9" width="13" height="9" rx="1.5" fill="white" /><path d="M14 21h5M16.5 18v3" /></svg>
+                <span className="hidden xl:inline">Second screen</span>
+              </button>
+            )}
             {saveStatus === 'saved' && !isEmpty && (
               <span className="ml-3 inline-flex items-center gap-1 text-sm text-gray-500" title="Tonight is saved in this browser as you go">
                 <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7" /></svg>
@@ -606,7 +636,7 @@ function PickupBasketballApp({ sample, onTrySample }: PickupBasketballAppProps) 
               </span>
             )}
           </div>
-          <div className="flex gap-4 items-center pointer-events-auto">
+          <div className="flex gap-3 xl:gap-4 items-center pointer-events-auto">
             <button
               onClick={handleUndo}
               disabled={!canUndo}
@@ -645,7 +675,7 @@ function PickupBasketballApp({ sample, onTrySample }: PickupBasketballAppProps) 
 
         {/* Scoreboard and the arranging bar stay in view while scrolling */}
         <div className={`sticky ${sample ? 'top-[76px]' : 'top-2'} z-40`}>
-          <Scoreboard stickyTop="" />
+          <Scoreboard stickyTop="" active={active} />
           <ArrangeBar stickyTop="" />
         </div>
 
@@ -738,6 +768,8 @@ function PickupBasketballApp({ sample, onTrySample }: PickupBasketballAppProps) 
         </div>
 
         <WaitingQueue />
+
+        <SittingOut />
 
         {/* Modals */}
         <ContentModal
