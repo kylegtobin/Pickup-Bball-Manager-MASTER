@@ -25,7 +25,16 @@ import SittingOut from './components/queue/SittingOut';
 import TvWindow from './components/TvWindow';
 import { isTvLink, openTvWindow, tvSupported, useTvBroadcast, TV_BLOCKED_MESSAGE } from './utils/tvLink';
 import { blockingDialogOpen, typing } from './utils/visibility';
+import { runViewToken } from './cloud/config';
+import { useCloud } from './cloud/useCloud';
+import { syncText } from './cloud/status';
+
 import './App.css';
+
+// Only loaded when someone opens it, so the QR code library stays out of the everyday app
+const PhonePanel = React.lazy(() => import('./components/cloud/PhonePanel'));
+// The phone page is its own small download too
+const RunView = React.lazy(() => import('./components/RunView'));
 
 // Where the real session is saved on this device. The sample never saves.
 const REAL_SESSION_KEY = 'pbm-session-v1';
@@ -35,6 +44,15 @@ const REAL_SESSION_KEY = 'pbm-session-v1';
 // (same rules code, separate in-memory state) and the real one is only hidden,
 // so opening, resetting or exiting a sample can never change a real session.
 function App() {
+  // A phone following a run through its link: read-only, nothing from this device is involved
+  const runToken = runViewToken();
+  if (runToken) {
+    return (
+      <React.Suspense fallback={<div className="min-h-screen bg-[#0E1A33]" />}>
+        <RunView token={runToken} />
+      </React.Suspense>
+    );
+  }
   // The second-screen window only shows court view and follows the main screen
   if (isTvLink()) return <TvWindow />;
   return <MainApp />;
@@ -131,6 +149,16 @@ function PickupBasketballApp({ sample, onTrySample, active }: PickupBasketballAp
   } = useGame();
   const { toast } = useToast();
   useTvBroadcast(gameState, !!sample, active);
+  // Phone view (off unless switched on for this browser). The sample never shares.
+  const cloud = useCloud(gameState, !sample);
+  const [phoneOpen, setPhoneOpen] = React.useState(false);
+  const [, setTick] = React.useState(0);
+  React.useEffect(() => {
+    if (!cloud.on) return;
+    const id = setInterval(() => setTick(t => t + 1), 5000);
+    return () => clearInterval(id);
+  }, [cloud.on]);
+  const cloudStatus = sample ? null : syncText(cloud);
 
   const handleUndo = () => {
     if (!canUndo) return;
@@ -620,7 +648,24 @@ function PickupBasketballApp({ sample, onTrySample, active }: PickupBasketballAp
                 aria-label="Second screen"
               >
                 <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="3" width="13" height="9" rx="1.5" /><rect x="10" y="9" width="13" height="9" rx="1.5" fill="white" /><path d="M14 21h5M16.5 18v3" /></svg>
-                <span className="hidden xl:inline">Second screen</span>
+                {/* With phone view on there's one more button, so the label waits for a wider screen */}
+                <span className={cloud.on && !sample ? 'hidden min-[1440px]:inline' : 'hidden xl:inline'}>Second screen</span>
+              </button>
+            )}
+            {cloud.on && !sample && (
+              <button
+                onClick={() => setPhoneOpen(true)}
+                className="relative inline-flex items-center gap-2 px-3 xl:px-4 py-2 rounded-lg border border-[#D5DAE1] bg-white hover:bg-gray-100 text-base font-semibold"
+                title={cloudStatus ? cloudStatus.text : 'Let players follow the line and the score on their phones'}
+                aria-label="Phone view"
+                aria-describedby="pbm-phone-status"
+              >
+                <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="2" width="12" height="20" rx="2.5" /><path d="M11 18h2" /></svg>
+                <span className="hidden min-[1440px]:inline">Phone view</span>
+                {cloudStatus && (
+                  <span aria-hidden="true" className={`absolute -top-1 -right-1 h-3 w-3 rounded-full ring-2 ring-white ${cloudStatus.tone === 'ok' ? 'bg-green-500' : cloudStatus.tone === 'warn' ? 'bg-amber-500' : cloudStatus.tone === 'bad' ? 'bg-red-600' : 'bg-gray-400'}`} />
+                )}
+                <span id="pbm-phone-status" className="sr-only">{cloudStatus?.text ?? ''}</span>
               </button>
             )}
             {saveStatus === 'saved' && !isEmpty && (
@@ -628,6 +673,15 @@ function PickupBasketballApp({ sample, onTrySample, active }: PickupBasketballAp
                 <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7" /></svg>
                 Saved
               </span>
+            )}
+            {cloudStatus && (cloudStatus.tone === 'warn' || cloudStatus.tone === 'bad') && (
+              <button
+                type="button"
+                onClick={() => setPhoneOpen(true)}
+                className={`ml-3 text-sm font-semibold underline-offset-2 hover:underline ${cloudStatus.tone === 'warn' ? 'text-amber-700' : 'text-red-700'}`}
+              >
+                {cloudStatus.text}
+              </button>
             )}
             {saveStatus === 'failed' && (
               <span className="ml-3 text-sm font-semibold text-red-700" role="status" title="This browser won't let the app save. Tonight still runs but won't survive a refresh.">
@@ -787,6 +841,12 @@ function PickupBasketballApp({ sample, onTrySample, active }: PickupBasketballAp
         {signInOpen && <SignInSheet onClose={() => setSignInOpen(false)} isSample={!!sample} />}
 
         {courtViewOpen && <CourtView onClose={() => setCourtViewOpen(false)} isSample={!!sample} />}
+
+        {phoneOpen && cloud.on && !sample && (
+          <React.Suspense fallback={null}>
+            <PhonePanel cloud={cloud} onClose={() => setPhoneOpen(false)} />
+          </React.Suspense>
+        )}
         
         <InfoModal
           isOpen={infoModalState.isOpen}

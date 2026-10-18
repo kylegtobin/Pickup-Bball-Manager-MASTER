@@ -249,3 +249,13 @@ input:checked + .toggle-slider:before {
   .pbm-confetti { display: none; }
   .pbm-pop, .pbm-heater { animation: none; }
 }
+
+/* Phone view: the Live dot breathes */
+@keyframes pbm-live-dot {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); }
+  50% { box-shadow: 0 0 0 5px rgba(34, 197, 94, 0); }
+}
+.pbm-live-dot { animation: pbm-live-dot 2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .pbm-live-dot { animation: none; }
+}
