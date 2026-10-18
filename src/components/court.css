@@ -16,7 +16,7 @@
   --led: #FFB21A;
   --gold: #F5B301;
   --cond: 'Barlow Condensed', 'Arial Narrow', sans-serif;
-  --gutter: clamp(118px, 9.5vw, 190px);
+  --gutter: clamp(140px, 10.5vw, 190px);
   position: fixed; inset: 0; z-index: 65;
   background: var(--wall);
   color: var(--ink);
@@ -143,16 +143,16 @@
 /* ---------- Controls (fade away on the TV) ---------- */
 .cb-controls {
   position: absolute; right: clamp(12px, 1.4vw, 28px); top: clamp(14px, 1.9vh, 28px); z-index: 5;
-  width: calc(var(--gutter) - clamp(20px, 2vw, 40px));
+  width: calc(var(--gutter) - clamp(16px, 1.6vw, 32px));
   display: flex; flex-direction: column; gap: 8px; transition: opacity 0.5s;
 }
 .cb-controls.hidden { opacity: 0; pointer-events: none; }
-.cb-btn { font-size: 14px; font-weight: 700; padding: 8px 10px; text-align: center; border-radius: 10px; background: rgba(255, 255, 255, 0.92); color: var(--ink); box-shadow: 0 0 0 1px var(--wall-line), 0 6px 14px -8px rgba(20, 33, 61, 0.5); white-space: nowrap; }
+.cb-btn { font-size: 13px; font-weight: 700; padding: 8px 6px; text-align: center; border-radius: 10px; background: rgba(255, 255, 255, 0.92); color: var(--ink); box-shadow: 0 0 0 1px var(--wall-line), 0 6px 14px -8px rgba(20, 33, 61, 0.5); white-space: nowrap; }
 .cb-btn:hover { background: #fff; }
 .cb-btn[aria-pressed='true'] { background: var(--ink); color: #fff; }
 .cb-btn.exit { background: var(--ink); color: #fff; }
 .cb-btn:focus-visible, .cb-scorebtn:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
-.cb-sample { position: absolute; left: clamp(12px, 1.4vw, 28px); top: clamp(14px, 1.9vh, 28px); width: calc(var(--gutter) - clamp(20px, 2vw, 40px)); text-align: center; z-index: 6; font-weight: 800; font-size: 14px; padding: 6px 12px; border-radius: 999px; background: var(--gold); color: var(--ink); }
+.cb-sample { position: absolute; left: clamp(12px, 1.4vw, 28px); top: clamp(14px, 1.9vh, 28px); width: calc(var(--gutter) - clamp(16px, 1.6vw, 32px)); text-align: center; z-index: 6; font-weight: 800; font-size: 14px; padding: 6px 12px; border-radius: 999px; background: var(--gold); color: var(--ink); }
 
 /* Score buttons for the runner (laptop court view only), tucked under the scoreboard */
 .cb-scorebar { display: flex; align-items: center; justify-content: center; gap: clamp(10px, 1.5vw, 28px); flex-wrap: wrap; }
