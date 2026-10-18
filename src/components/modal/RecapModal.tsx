@@ -4,6 +4,8 @@ import { NightSummary } from '../../types';
 import { nightLeaders, joinNames } from '../../utils/nightStats';
 import { drawRecapCard, downloadBlob, downloadBackup, recapFilename } from '../../utils/recapImage';
 import { useDialogFocus } from '../../utils/useDialogFocus';
+import { parseBackup, ParsedBackup } from '../../utils/backup';
+import GameLedger from '../GameLedger';
 
 const timeOf = (ts: number | null) =>
   ts ? new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : null;
@@ -21,13 +23,29 @@ const saveImage = async (night: NightSummary) => {
 // Tonight at a glance, worked out from the night itself (nothing is sent anywhere).
 // Finish night keeps tonight on this device and clears the courts for next time.
 const RecapModal: React.FC<{ onClose: () => void; isSample?: boolean }> = ({ onClose, isSample }) => {
-  const { gameState, finishNight, archive } = useGame();
+  const { gameState, finishNight, archive, restoreNight, resumeFromBackup } = useGame();
   const { gamesPlayed, bestStreak, championStreak, playersTonight, sessionStartedAt, lastResultAt, champions, games } = gameState;
   const [view, setView] = React.useState<'tonight' | 'confirm' | 'finished'>('tonight');
   const [finished, setFinished] = React.useState<NightSummary | null>(null);
   const [preview, setPreview] = React.useState<string | null>(null);
   const [finishError, setFinishError] = React.useState<string | null>(null);
   const [allNights, setAllNights] = React.useState(false);
+  const [showGames, setShowGames] = React.useState(false);
+  const [openNight, setOpenNight] = React.useState<string | null>(null);
+  const [restore, setRestore] = React.useState<ParsedBackup | null>(null);
+  const [restoreMsg, setRestoreMsg] = React.useState<{ ok: boolean; text: string } | null>(null);
+  const fileRef = React.useRef<HTMLInputElement>(null);
+  const nightInProgress = gameState.games.length > 0 || gameState.playersTonight.length > 0 ||
+    gameState.champions.length + gameState.challengers.length + gameState.waitingQueue.length > 0;
+
+  const onBackupFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    const parsed = parseBackup(await file.text());
+    if (parsed.ok) { setRestore(parsed.backup); setRestoreMsg(null); }
+    else { setRestore(null); setRestoreMsg({ ok: false, text: parsed.error }); }
+  };
   const dialogRef = React.useRef<HTMLDivElement>(null);
   useDialogFocus(dialogRef);
 
@@ -155,6 +173,15 @@ const RecapModal: React.FC<{ onClose: () => void; isSample?: boolean }> = ({ onC
           )
         )}
 
+        {view === 'tonight' && games.length > 0 && (
+          <div className="mt-4">
+            <button className="text-sm font-semibold text-[#1E3A8A] hover:underline" aria-expanded={showGames} onClick={() => setShowGames(v => !v)}>
+              {showGames ? 'Hide games' : `Show all ${games.length} ${games.length === 1 ? 'game' : 'games'}`}
+            </button>
+            {showGames && <div className="mt-3 max-h-80 overflow-auto pr-1"><GameLedger games={games} /></div>}
+          </div>
+        )}
+
         {view === 'tonight' && (
           <div className="mt-6 flex flex-wrap gap-3">
             <button className={`${btn} bg-[#1B2430] hover:bg-black text-white disabled:opacity-40 disabled:cursor-not-allowed`} disabled={gamesPlayed === 0} onClick={() => saveImage(tonight)}>
@@ -189,15 +216,19 @@ const RecapModal: React.FC<{ onClose: () => void; isSample?: boolean }> = ({ onC
             <h3 className="font-bold text-[#1B2430] mb-2">Past nights</h3>
             <ul className={`divide-y divide-[#EEF1F4] ${allNights ? 'max-h-72 overflow-auto pr-1' : ''}`}>
               {(allNights ? archive : archive.slice(0, 6)).map(n => (
-                <li key={n.id} className="flex items-center justify-between gap-3 py-2">
-                  <span className="text-gray-800">
-                    <strong>{dayOf(n.startedAt)}</strong>
-                    <span className="text-gray-500"> · {n.gamesPlayed} {n.gamesPlayed === 1 ? 'game' : 'games'} · {n.playersTonight.length} players</span>
-                  </span>
-                  <span className="flex gap-2 shrink-0">
-                    <button className="text-sm font-semibold text-[#1E3A8A] hover:underline disabled:opacity-40" disabled={n.gamesPlayed === 0} onClick={() => saveImage(n)}>Image</button>
-                    <button className="text-sm font-semibold text-[#1E3A8A] hover:underline" onClick={() => downloadBackup(n)}>Backup</button>
-                  </span>
+                <li key={n.id} className="py-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-gray-800">
+                      <strong>{dayOf(n.startedAt)}</strong>
+                      <span className="text-gray-500"> · {n.gamesPlayed} {n.gamesPlayed === 1 ? 'game' : 'games'} · {n.playersTonight.length} players</span>
+                    </span>
+                    <span className="flex gap-3 shrink-0">
+                      <button className="text-sm font-semibold text-[#1E3A8A] hover:underline disabled:opacity-40" disabled={n.games.length === 0} aria-expanded={openNight === n.id} onClick={() => setOpenNight(o => (o === n.id ? null : n.id))}>Games</button>
+                      <button className="text-sm font-semibold text-[#1E3A8A] hover:underline disabled:opacity-40" disabled={n.gamesPlayed === 0} onClick={() => saveImage(n)}>Image</button>
+                      <button className="text-sm font-semibold text-[#1E3A8A] hover:underline" onClick={() => downloadBackup(n)}>Backup</button>
+                    </span>
+                  </div>
+                  {openNight === n.id && <div className="mt-2 max-h-72 overflow-auto pr-1"><GameLedger games={n.games} /></div>}
                 </li>
               ))}
             </ul>
@@ -205,6 +236,48 @@ const RecapModal: React.FC<{ onClose: () => void; isSample?: boolean }> = ({ onC
               <button className="mt-2 text-sm font-semibold text-[#1E3A8A] hover:underline" onClick={() => setAllNights(v => !v)}>
                 {allNights ? 'Show fewer' : `Show all ${archive.length} nights`}
               </button>
+            )}
+          </div>
+        )}
+
+        {!isSample && view !== 'confirm' && (
+          <div className="mt-5 border-t border-[#E3E7EC] pt-4">
+            <input ref={fileRef} type="file" accept="application/json,.json" className="hidden" onChange={onBackupFile} aria-label="Backup file" />
+            <button className={btnLight} onClick={() => fileRef.current?.click()}>Restore a backup</button>
+            {restoreMsg && <p role="status" className={`mt-3 font-semibold ${restoreMsg.ok ? 'text-green-700' : 'text-red-700'}`}>{restoreMsg.text}</p>}
+            {restore && (
+              <div className="mt-3 rounded-xl border border-[#D5DAE1] bg-[#F7F8FA] p-4">
+                <p className="font-bold text-[#1B2430]">Backup of {dayOf(restore.night.startedAt)}</p>
+                <p className="text-gray-700">{restore.night.gamesPlayed} {restore.night.gamesPlayed === 1 ? 'game' : 'games'} · {restore.night.playersTonight.length} players{restore.night.bestStreak ? ` · longest streak ${restore.night.bestStreak.count}` : ''}</p>
+                <div className="mt-3 flex flex-wrap gap-3">
+                  <button
+                    className={`${btn} bg-[#1B2430] hover:bg-black text-white`}
+                    onClick={() => {
+                      const ok = restoreNight(restore.night);
+                      setRestoreMsg(ok ? { ok: true, text: 'Added to Past nights.' } : { ok: false, text: "This browser wouldn't save it." });
+                      if (ok) setRestore(null);
+                    }}
+                  >
+                    Add to Past nights
+                  </button>
+                  {restore.state && (
+                    <button
+                      className={btnLight}
+                      disabled={nightInProgress}
+                      title={nightInProgress ? 'Finish or clear tonight first, so nothing gets overwritten' : 'Load this night back onto the courts'}
+                      onClick={() => {
+                        const ok = resumeFromBackup(restore.state!);
+                        setRestoreMsg(ok ? { ok: true, text: 'Night picked back up.' } : { ok: false, text: 'Finish tonight first, so nothing gets overwritten.' });
+                        if (ok) setRestore(null);
+                      }}
+                    >
+                      Pick this night back up
+                    </button>
+                  )}
+                  <button className={btnLight} onClick={() => setRestore(null)}>Cancel</button>
+                </div>
+                {restore.state && nightInProgress && <p className="text-sm text-gray-500 mt-2">To pick it back up, finish tonight first. Nothing in progress is ever overwritten.</p>}
+              </div>
             )}
           </div>
         )}
