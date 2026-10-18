@@ -68,35 +68,13 @@ const ContentModal: React.FC<ContentModalProps> = ({ isOpen, title, content, onC
           <div className="w-8"></div> {/* Empty div for spacing */}
           {['My Story', 'Game Format & Rules', 'Site User Guide'].includes(title) ? (
             <div className="w-full flex flex-col items-center">
-              <span
-                className="text-5xl font-extrabold tracking-widest uppercase text-center"
-                style={{
-                  fontFamily: "'Montserrat', 'Arial Black', 'Arial Bold', sans-serif",
-                  background: 'linear-gradient(90deg, #2d064a 60%, #5d3fd3 100%)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  letterSpacing: '0.22em',
-                  display: 'block',
-                  textShadow: '0 2px 6px rgba(44,0,70,0.18)',
-                  position: 'relative',
-                }}
+              <h2
+                className="text-center"
+                style={{ fontFamily: "'Barlow Condensed', 'Arial Narrow', sans-serif", fontStyle: 'italic', fontWeight: 900, fontSize: 'clamp(30px, 4vw, 44px)', lineHeight: 1, color: '#0F1B2D' }}
               >
-                {title.toUpperCase()}
-                <span style={{
-                  content: '""',
-                  position: 'absolute',
-                  left: 0,
-                  top: 0,
-                  width: '100%',
-                  height: '100%',
-                  background: 'linear-gradient(120deg, rgba(255,255,255,0.18) 20%, rgba(255,255,255,0.01) 80%)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  pointerEvents: 'none',
-                  zIndex: 1,
-                  display: 'block',
-                }} />
-              </span>
+                {title}
+              </h2>
+              <span aria-hidden="true" className="mt-2 block h-1.5 w-16 rounded-full" style={{ background: 'linear-gradient(90deg, #E85A00 50%, #1E3A8A 50%)' }} />
             </div>
           ) : (
             <h2 className="text-3xl font-bold text-gray-800 text-center">{title}</h2>
