@@ -1,6 +1,6 @@
 // Saving the night in this browser: the saved session, its Undo steps, and saved lists.
 import { GameState } from '../types';
-import { defaultGameState, hasNight, isStable, migrateSitters } from '../rules/lineup';
+import { defaultGameState, hasNight, isStable, clearSitOut } from '../rules/lineup';
 
 
 export const SAVE_VERSION = 1;
@@ -17,12 +17,12 @@ export const readSavedSession = (key: string): { savedAt: number; lastSeen: numb
     if (!raw) return null;
     const data = JSON.parse(raw);
     if (!data || data.v !== SAVE_VERSION || !data.state) return null;
-    const state: GameState = migrateSitters({ ...defaultGameState, ...data.state });
+    const state: GameState = clearSitOut({ ...defaultGameState, ...data.state });
     if (!hasNight(state) || !isStable(state.status)) return null;
     const history: UndoStep[] = Array.isArray(data.history)
       ? data.history
           .filter((h: UndoStep) => h && h.state && typeof h.label === 'string')
-          .map((h: UndoStep) => ({ label: h.label, at: h.at, state: migrateSitters({ ...defaultGameState, ...h.state }) }))
+          .map((h: UndoStep) => ({ label: h.label, at: h.at, state: clearSitOut({ ...defaultGameState, ...h.state }) }))
       : [];
     const savedAt = Number(data.savedAt) || Date.now();
     // While the clock runs the app notes the time every few seconds and when the page closes,
