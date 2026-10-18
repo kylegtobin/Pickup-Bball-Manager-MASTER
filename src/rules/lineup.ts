@@ -1,8 +1,8 @@
 // The night's rules that don't need React: who's where, open spots, sitting out, and what gets saved.
 // GameContext uses these; keeping them here makes them easy to test and, later, to share with the server.
 import { v4 as uuidv4 } from 'uuid';
-import { Player, PreviousTeam, WaitingQueueItem, GameState, Regular, PlayerRef, NightSummary, SittingOut } from '../types';
-import { Side, newScore, newClock, timeLeft } from '../utils/score';
+import { Player, PreviousTeam, WaitingQueueItem, GameState, Regular, PlayerRef, NightSummary } from '../types';
+import { newScore, newClock, timeLeft } from '../utils/score';
 
 // Helper function to check if an item is a PreviousTeam
 export const isPreviousTeam = (item: WaitingQueueItem): item is PreviousTeam => {
@@ -126,15 +126,13 @@ export const rosterSignature = (s: GameState) => JSON.stringify([
   s.score.challengers,
   s.champions.map(p => p.id),
   s.challengers.map(p => p.id),
-  s.waitingQueue.map(item => (isPreviousTeam(item) ? [item.id, item.players.map(p => (p.away ? `~${p.id}` : p.id))] : item.away ? `~${item.id}` : item.id)),
-  (s.sittingOut ?? []).map(e => e.player.id),
+  s.waitingQueue.map(item => (isPreviousTeam(item) ? [item.id, item.players.map(p => p.id)] : item.id)),
 ]);
 
-// Someone in line who could step onto the court right now (not sitting out)
-export const hasAvailableWaiter = (s: GameState) =>
-  s.waitingQueue.some(item => (isPreviousTeam(item) ? item.players.some(p => !p.away) : !item.away));
+// Someone in line who could step onto the court right now
+export const hasAvailableWaiter = (s: GameState) => s.waitingQueue.length > 0;
 
-// After anyone sits out, comes back, leaves or signs in: if a team is short, either the runner moves
+// After anyone leaves or signs in: if a team is short, either the runner moves
 // someone up from the line (when someone's available) or new sign-ins fill it (when nobody is).
 // Nobody who signs in can jump ahead of people already waiting.
 // Worked out from the lineup itself every time, never from an older status, so moves, Undo and
@@ -154,20 +152,29 @@ export const reconcileVacancy = (s: GameState): GameState => {
   return s;
 };
 
-// Sign-ins (or someone coming back) may go straight onto a short team only when nobody available is waiting
+// Sign-ins may go straight onto a short team only when nobody available is waiting
 export const canFillDirectly = (s: GameState) =>
   (s.champions.length < 5 || s.challengers.length < 5) && !hasAvailableWaiter(s) &&
   (s.status === 'INITIAL' || s.status === 'WAITING_FOR_PLAYERS' || s.status === 'WAITING_FOR_MANUAL_REPLACEMENT' || s.status === 'READY');
 
-// Saves from before Oct 18 kept people who sat out in line in a separate list, and court spots without
-// a record of whether they were filled. Line sitters go back into the line (at the end, still sitting
-// out); court spots whose history isn't known can't be claimed back.
-export const migrateSitters = (s: GameState): GameState => {
-  const list = s.sittingOut ?? [];
-  if (!list.some(e => e.from === 'line' || e.spotFilled === undefined)) return { ...s, sittingOut: list };
-  const toLine = list.filter(e => e.from === 'line').map(e => ({ ...e.player, away: e.player.away ?? e.at }));
-  const court = list.filter(e => e.from !== 'line').map(e => (e.spotFilled === undefined ? { ...e, spotFilled: true } : e));
-  return { ...s, sittingOut: court, waitingQueue: [...s.waitingQueue, ...toLine] };
+// Sit out was removed (Oct 18). Saves and backups from before then can still have people sitting out,
+// in line (marked away) or off the court. They all go to the end of the line, as if they'd signed in again.
+export const clearSitOut = (s: GameState): GameState => {
+  const strip = (p: Player): Player => { const { away, ...rest } = p; void away; return rest; };
+  const returning: Player[] = [];
+  const queue = s.waitingQueue.flatMap((item): WaitingQueueItem[] => {
+    if (!isPreviousTeam(item)) {
+      if (item.away) { returning.push(strip(item)); return []; }
+      return [item];
+    }
+    const here = item.players.filter(p => !p.away);
+    item.players.filter(p => p.away).forEach(p => returning.push(strip(p)));
+    if (here.length === item.players.length) return [item];
+    return here.length ? [{ ...item, players: here }] : [];
+  });
+  (s.sittingOut ?? []).forEach(e => returning.push(strip(e.player)));
+  if (returning.length === 0 && (s.sittingOut ?? []).length === 0) return s;
+  return { ...s, sittingOut: [], waitingQueue: [...queue, ...returning] };
 };
 
 export const ref = (p: Player): PlayerRef => ({ id: p.rid ?? p.id, name: p.name });
@@ -214,7 +221,6 @@ export const withDefaults = (raw: Partial<GameState>): GameState => {
 export const everyoneIn = (s: GameState): Player[] => [
   ...s.champions, ...s.challengers,
   ...s.waitingQueue.flatMap(item => (isPreviousTeam(item) ? item.players : [item])),
-  ...(s.sittingOut ?? []).map(e => e.player),
 ];
 
 // Takes someone out of the line (or their group), wherever they are in it
@@ -226,15 +232,6 @@ export const removeFromLine = (s: GameState, playerId: string): GameState => ({
     return players.length === 0 ? [] : [players.length === item.players.length ? item : { ...item, players }];
   }),
 });
-
-// Someone new took an open spot on this team: the oldest unfilled spot from this game is no longer
-// waiting for the person who sat out from it
-export const markSpotFilled = (s: GameState, side: Side): GameState => {
-  const list = s.sittingOut ?? [];
-  const i = list.findIndex(e => e.from === side && e.gameNo === s.games.length && e.spotFilled === false);
-  if (i < 0) return s;
-  return { ...s, sittingOut: list.map((e, j) => (j === i ? { ...e, spotFilled: true } : e)) };
-};
 
 // Matches people from a backup to the names saved on this device (same id, or else same name)
 export const reconcileRegulars = (regulars: Regular[], people: PlayerRef[], nightId: string | null) => {
@@ -264,32 +261,4 @@ export const remapNight = (night: NightSummary, map: Record<string, string>): Ni
       shootout: g.shootout ? { ...g.shootout, shooters: g.shootout.shooters.map(m), picked: g.shootout.picked.map(m) } : g.shootout,
     })),
   };
-};
-
-// Where someone coming back from sitting out belongs:
-// - their own spot on court, only during the same game and only if nobody has taken it
-// - their waiting group, if it's still in line (so a shootout still applies to them)
-// - just ahead of whoever was behind them, if that person is still waiting
-// - otherwise the end of the line (their turn came and went while they sat)
-export const placeReturning = (s: GameState, e: SittingOut):
-  { where: 'court' } | { where: 'group'; groupId: string } | { where: 'before'; beforeId: string } | { where: 'end' } => {
-  if (e.from !== 'line') {
-    const team = s[e.from];
-    const sameGame = e.gameNo === undefined || e.gameNo === s.games.length;
-    const untouched = e.spotFilled === undefined
-      ? !e.teamIds || team.every(p => e.teamIds!.includes(p.id)) // older saves
-      : !e.spotFilled;
-    if (sameGame && untouched && team.length < 5) return { where: 'court' };
-    return { where: 'end' };
-  }
-  if (e.groupId) {
-    const g = s.waitingQueue.find(item => isPreviousTeam(item) && item.id === e.groupId) as PreviousTeam | undefined;
-    if (g && g.players.length < 5 && s.shootoutTeam?.id !== g.id) return { where: 'group', groupId: g.id };
-    return { where: 'end' };
-  }
-  if (e.behindId) {
-    if (s.waitingQueue.some(item => item.id === e.behindId)) return { where: 'before', beforeId: e.behindId };
-    return { where: 'end' };
-  }
-  return { where: 'end' };
 };
