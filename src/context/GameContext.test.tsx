@@ -317,12 +317,14 @@ describe('regulars and finishing a night', () => {
 
   test('finish night archives tonight, clears the courts and the saved night', () => {
     const { result, unmount } = setup({ persistKey: KEY });
-    signIn(result, NAMES.slice(0, 12));
+    signIn(result, NAMES.slice(0, 15));
     win(result, 'champions');
-    let summary: ReturnType<typeof result.current.finishNight> = null;
-    act(() => { summary = result.current.finishNight(); });
-    expect(summary!.gamesPlayed).toBe(1);
-    expect(summary!.games).toHaveLength(1);
+    let out: ReturnType<typeof result.current.finishNight> | null = null;
+    act(() => { out = result.current.finishNight(); });
+    const done = out as unknown as { ok: true; summary: { gamesPlayed: number; games: unknown[] } };
+    expect(done.ok).toBe(true);
+    expect(done.summary.gamesPlayed).toBe(1);
+    expect(done.summary.games).toHaveLength(1);
     expect(result.current.archive).toHaveLength(1);
     expect(result.current.gameState.champions).toEqual([]);
     expect(result.current.gameState.games).toEqual([]);
@@ -340,6 +342,203 @@ describe('regulars and finishing a night', () => {
     win(result, 'champions');
     act(() => { result.current.finishNight(); });
     expect(window.localStorage.length).toBe(0);
+    unmount();
+  });
+});
+
+describe('scoreboard', () => {
+  const ten = (result: Hook) => signIn(result, NAMES.slice(0, 12));
+  const pts = (result: Hook, side: 'champions' | 'challengers', n: number, correction = false) =>
+    act(() => { result.current.addPoints(side, n, correction); });
+
+  test('points count, can be undone one basket at a time, and never go below zero', () => {
+    const { result, unmount } = setup();
+    ten(result);
+    pts(result, 'champions', 2);
+    pts(result, 'challengers', 1);
+    expect(result.current.gameState.score).toEqual({ champions: 2, challengers: 1 });
+    expect(result.current.undoLabel).toBe('+1 Challengers');
+    act(() => { result.current.undo(); });
+    expect(result.current.gameState.score).toEqual({ champions: 2, challengers: 0 });
+    pts(result, 'challengers', -1, true);
+    expect(result.current.gameState.score.challengers).toBe(0);
+    unmount();
+  });
+
+  test('once a team wins, normal scoring stops and the clock freezes; corrections still work', () => {
+    const { result, unmount } = setup();
+    ten(result);
+    act(() => { result.current.startClock(); });
+    for (let i = 0; i < 5; i++) pts(result, 'champions', 2);
+    pts(result, 'champions', 1); // 11-0
+    const s = result.current.gameState;
+    expect(s.score.champions).toBe(11);
+    expect(s.clock.runningSince).toBeNull();
+    pts(result, 'challengers', 2); // blocked
+    expect(result.current.gameState.score.challengers).toBe(0);
+    pts(result, 'champions', -1, true); // correction: 10-0, game back on
+    expect(result.current.gameState.score.champions).toBe(10);
+    unmount();
+  });
+
+  test('recording a result saves the final score and how it ended, then resets to 0-0 and 12:00', () => {
+    const { result, unmount } = setup();
+    ten(result);
+    act(() => { result.current.startClock(); });
+    for (let i = 0; i < 6; i++) pts(result, 'challengers', 2); // 0-12
+    act(() => { result.current.handleGameEnd('challengers', 'points'); });
+    const s = result.current.gameState;
+    expect(s.games[0].final).toEqual({ champions: 0, challengers: 12 });
+    expect(s.games[0].endedBy).toBe('points');
+    expect(s.score).toEqual({ champions: 0, challengers: 0 });
+    expect(s.clock.remainingMs).toBe(12 * 60 * 1000);
+    expect(s.clock.runningSince).toBeNull();
+    unmount();
+  });
+
+  test('undoing a result brings back the final score with the clock paused', () => {
+    const { result, unmount } = setup();
+    signIn(result, NAMES.slice(0, 10)); // same ten run it back
+    act(() => { result.current.startClock(); });
+    pts(result, 'champions', 2);
+    act(() => { result.current.handleGameEnd('champions', 'manual'); });
+    expect(result.current.gameState.score.champions).toBe(0);
+    act(() => { result.current.undo(); });
+    const s = result.current.gameState;
+    expect(s.score.champions).toBe(2);
+    expect(s.games).toHaveLength(0);
+    expect(s.clock.runningSince).toBeNull();
+    expect(s.clock.remainingMs).toBeGreaterThan(11 * 60 * 1000);
+    unmount();
+  });
+
+  test('a manual result with no score keeps the score unknown', () => {
+    const { result, unmount } = setup();
+    ten(result);
+    act(() => { result.current.handleGameEnd('champions'); });
+    expect(result.current.gameState.games[0].final).toBeUndefined();
+    expect(result.current.gameState.games[0].endedBy).toBe('manual');
+    unmount();
+  });
+
+  test('after time with a leader, scoring is blocked; tied, the next bucket wins and undo brings back next-bucket', () => {
+    const { result, unmount } = setup();
+    ten(result);
+    pts(result, 'champions', 2);
+    pts(result, 'challengers', 2);
+    act(() => { result.current.adjustClock(-12 * 60 * 1000); }); // time's up at 2-2
+    expect(result.current.gameState.clock.buzzerScore).toEqual({ champions: 2, challengers: 2 });
+    pts(result, 'challengers', 1); // next bucket
+    expect(result.current.gameState.score).toEqual({ champions: 2, challengers: 3 });
+    pts(result, 'champions', 2); // blocked, it's decided
+    expect(result.current.gameState.score.champions).toBe(2);
+    act(() => { result.current.undo(); });
+    expect(result.current.gameState.score).toEqual({ champions: 2, challengers: 2 });
+    expect(result.current.gameState.clock.buzzerScore).toEqual({ champions: 2, challengers: 2 });
+    unmount();
+  });
+
+  test('the score and a running clock survive a refresh, and the clock comes back paused', () => {
+    const first = setup({ persistKey: KEY });
+    ten(first.result);
+    act(() => { first.result.current.startClock(); });
+    pts(first.result, 'champions', 2);
+    first.unmount();
+    const second = setup({ persistKey: KEY });
+    act(() => { second.result.current.resumeSession(); });
+    const s = second.result.current.gameState;
+    expect(s.score.champions).toBe(2);
+    expect(s.clock.runningSince).toBeNull();
+    expect(s.clock.remainingMs).toBeLessThanOrEqual(12 * 60 * 1000);
+    second.unmount();
+  });
+
+  test('older saves without a scoreboard still load', () => {
+    window.localStorage.setItem(KEY, JSON.stringify({ v: 1, savedAt: Date.now(), state: { champions: [{ id: 'a', name: 'Avery' }], challengers: [], waitingQueue: [], status: 'INITIAL' } }));
+    const { result, unmount } = setup({ persistKey: KEY });
+    act(() => { result.current.resumeSession(); });
+    expect(result.current.gameState.score).toEqual({ champions: 0, challengers: 0 });
+    expect(result.current.gameState.clock.remainingMs).toBe(12 * 60 * 1000);
+    unmount();
+  });
+});
+
+describe('audit fixes', () => {
+  test('finish night keeps everything if the archive cannot be saved', () => {
+    const { result, unmount } = setup({ persistKey: KEY });
+    signIn(result, NAMES.slice(0, 15));
+    win(result, 'champions');
+    const realSet = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (k: string, v: string) {
+      if (k === `${KEY}-archive`) throw new Error('full');
+      return realSet.call(this, k, v);
+    };
+    let out: ReturnType<typeof result.current.finishNight> | null = null;
+    act(() => { out = result.current.finishNight(); });
+    Storage.prototype.setItem = realSet;
+    expect((out as unknown as { ok: boolean; reason: string })).toEqual({ ok: false, reason: 'storage' });
+    expect(result.current.gameState.games).toHaveLength(1);
+    expect(result.current.gameState.champions).toHaveLength(5);
+    expect(result.current.canUndo).toBe(true);
+    expect(window.localStorage.getItem(KEY)).not.toBeNull();
+    act(() => { out = result.current.finishNight(); }); // works once storage is back
+    expect((out as unknown as { ok: boolean }).ok).toBe(true);
+    unmount();
+  });
+
+  test('a night with results is kept after everyone leaves', () => {
+    const first = setup({ persistKey: KEY });
+    signIn(first.result, NAMES.slice(0, 10));
+    win(first.result, 'champions');
+    NAMES.slice(0, 10).forEach(n => act(() => { first.result.current.removePlayer(n); }));
+    expect(window.localStorage.getItem(KEY)).not.toBeNull();
+    first.unmount();
+    const second = setup({ persistKey: KEY });
+    expect(second.result.current.pendingResume).toEqual(expect.objectContaining({ players: 0, games: 1 }));
+    act(() => { second.result.current.resumeSession(); });
+    expect(second.result.current.gameState.games).toHaveLength(1);
+    second.unmount();
+  });
+
+  test('start fresh puts a saved night with results into past nights', () => {
+    const first = setup({ persistKey: KEY });
+    signIn(first.result, NAMES.slice(0, 10));
+    win(first.result, 'champions');
+    first.unmount();
+    const second = setup({ persistKey: KEY });
+    act(() => { second.result.current.discardSavedSession(); });
+    expect(second.result.current.archive).toHaveLength(1);
+    expect(window.localStorage.getItem(KEY)).toBeNull();
+    second.unmount();
+  });
+
+  test('a refresh does not give clock time back', () => {
+    const first = setup({ persistKey: KEY });
+    signIn(first.result, NAMES.slice(0, 10));
+    act(() => { first.result.current.startClock(); });
+    first.unmount();
+    // The app last saw the clock running 20 seconds after the last save
+    const saved = JSON.parse(window.localStorage.getItem(KEY)!);
+    const startedAt = saved.state.clock.runningSince;
+    window.localStorage.setItem(`${KEY}-clock-seen`, String(startedAt + 20000));
+    const second = setup({ persistKey: KEY });
+    act(() => { second.result.current.resumeSession(); });
+    const c = second.result.current.gameState.clock;
+    expect(c.runningSince).toBeNull();
+    expect(c.remainingMs).toBeLessThanOrEqual(12 * 60 * 1000 - 20000);
+    expect(c.remainingMs).toBeGreaterThan(12 * 60 * 1000 - 21000);
+    second.unmount();
+  });
+
+  test('a basket after a tied buzzer is logged as next bucket, even past 11 or 15', () => {
+    const { result, unmount } = setup();
+    signIn(result, NAMES.slice(0, 12));
+    for (let i = 0; i < 5; i++) { act(() => { result.current.addPoints('champions', 2); }); act(() => { result.current.addPoints('challengers', 2); }); }
+    act(() => { result.current.adjustClock(-12 * 60 * 1000); }); // 10-10 at the buzzer
+    act(() => { result.current.addPoints('champions', 2); }); // 12-10
+    act(() => { result.current.handleGameEnd('champions', 'sudden'); });
+    expect(result.current.gameState.games[0].endedBy).toBe('sudden');
+    expect(result.current.gameState.games[0].id).toBeTruthy();
     unmount();
   });
 });

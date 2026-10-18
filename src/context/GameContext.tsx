@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { Player, PreviousTeam, WaitingQueueItem, GameState, Regular, PlayerRef, GameRecord, NightSummary } from '../types';
 import { useToast } from '../components/ui/Toast'; 
 import { planChallengers } from '../utils/formChallengers';
+import { Side, EndedBy, newScore, newClock, timeLeft, decide } from '../utils/score';
 
 // Helper function to check if an item is a PreviousTeam
 export const isPreviousTeam = (item: WaitingQueueItem): item is PreviousTeam => {
@@ -82,7 +83,12 @@ export interface GameContextProps {
   movePlayer: (playerId: string, targetIndex: number) => void;
   moveTeam: (teamId: string, targetIndex: number) => void;
   addPlayerToTeam: (playerId: string, targetTeam: 'champions' | 'challengers') => void;
-  handleGameEnd: (winner: 'champions' | 'challengers') => void;
+  handleGameEnd: (winner: 'champions' | 'challengers', endedBy?: EndedBy) => void;
+  // Scoreboard
+  addPoints: (side: Side, points: number, correction?: boolean) => void;
+  startClock: () => void;
+  pauseClock: () => void;
+  adjustClock: (deltaMs: number) => void;
   confirmShootout: (selectedPlayers: Player[]) => void;
   toggleManualMode: () => void;
   dismissShootoutModal: () => void;
@@ -100,7 +106,7 @@ export interface GameContextProps {
   canUndo: boolean;
   undoLabel: string | null;
   // Save the night: a saved session found on this device, waiting for Resume or Start fresh
-  pendingResume: { savedAt: number; players: number } | null;
+  pendingResume: { savedAt: number; players: number; games: number } | null;
   resumeSession: () => void;
   discardSavedSession: () => void;
   // Manual mode
@@ -115,7 +121,7 @@ export interface GameContextProps {
   saveStatus: 'saved' | 'failed' | 'off';
   otherTabOpen: boolean;
   // Finish night: archive tonight on this device and clear the courts
-  finishNight: () => NightSummary | null;
+  finishNight: () => { ok: true; summary: NightSummary } | { ok: false; reason: 'nothing' | 'busy' | 'storage' };
   archive: NightSummary[];
 }
 
@@ -145,7 +151,10 @@ const defaultGameState: GameState = {
   sessionStartedAt: null,
   lastResultAt: null,
   playersTonight: [],
-  games: []
+  games: [],
+  nightId: null,
+  score: newScore(),
+  clock: newClock()
 };
 
 // PENDING_QUEUE_UPDATE and FORMING_CHALLENGERS only exist for a moment while a result is processed.
@@ -156,11 +165,16 @@ const countPlayers = (s: GameState) =>
   s.champions.length + s.challengers.length +
   s.waitingQueue.reduce((n, item) => n + (isPreviousTeam(item) ? item.players.length : 1), 0);
 
+// A night worth keeping: anyone signed in, or any game played, even if everyone has gone home
+const hasNight = (s: GameState) => countPlayers(s) > 0 || s.games.length > 0 || s.playersTonight.length > 0;
+
 // Who is where. Undo records a step whenever this changes (not on clock ticks or mode switches).
 // The game count is part of it, so a result is always a step even when nobody moves
 // (with exactly 10 players, a Champions win puts the same two teams right back on).
 const rosterSignature = (s: GameState) => JSON.stringify([
   s.games.length,
+  s.score.champions,
+  s.score.challengers,
   s.champions.map(p => p.id),
   s.challengers.map(p => p.id),
   s.waitingQueue.map(item => (isPreviousTeam(item) ? [item.id, item.players.map(p => p.id)] : item.id)),
@@ -168,23 +182,30 @@ const rosterSignature = (s: GameState) => JSON.stringify([
 
 const SAVE_VERSION = 1;
 
-type UndoStep = { state: GameState; label: string };
-const SAVED_UNDO_STEPS = 15; // Undo steps kept with the saved night, so Undo still works after a refresh
+type UndoStep = { state: GameState; label: string; at?: number };
+const UNDO_STEPS = 60; // Scoring adds a step per basket, so keep plenty
+const SAVED_UNDO_STEPS = 20; // Undo steps kept with the saved night, so Undo still works after a refresh
 
-const readSavedSession = (key: string): { savedAt: number; state: GameState; history: UndoStep[] } | null => {
+const heartbeatKey = (key: string) => `${key}-clock-seen`;
+
+const readSavedSession = (key: string): { savedAt: number; lastSeen: number; state: GameState; history: UndoStep[] } | null => {
   try {
     const raw = window.localStorage.getItem(key);
     if (!raw) return null;
     const data = JSON.parse(raw);
     if (!data || data.v !== SAVE_VERSION || !data.state) return null;
     const state: GameState = { ...defaultGameState, ...data.state };
-    if (countPlayers(state) === 0 || !isStable(state.status)) return null;
+    if (!hasNight(state) || !isStable(state.status)) return null;
     const history: UndoStep[] = Array.isArray(data.history)
       ? data.history
           .filter((h: UndoStep) => h && h.state && typeof h.label === 'string')
-          .map((h: UndoStep) => ({ label: h.label, state: { ...defaultGameState, ...h.state } }))
+          .map((h: UndoStep) => ({ label: h.label, at: h.at, state: { ...defaultGameState, ...h.state } }))
       : [];
-    return { savedAt: Number(data.savedAt) || Date.now(), state, history };
+    const savedAt = Number(data.savedAt) || Date.now();
+    // While the clock runs the app notes the time every few seconds and when the page closes,
+    // so a refresh doesn't give time back
+    const seen = Number(window.localStorage.getItem(heartbeatKey(key))) || 0;
+    return { savedAt, lastSeen: Math.max(savedAt, seen), state, history };
   } catch {
     return null;
   }
@@ -209,6 +230,23 @@ const writeList = (key: string, list: unknown[]): boolean => {
 };
 
 const ref = (p: Player): PlayerRef => ({ id: p.rid ?? p.id, name: p.name });
+
+const summarize = (s: GameState): NightSummary => ({
+  id: s.nightId ?? uuidv4(),
+  startedAt: s.sessionStartedAt,
+  endedAt: Date.now(),
+  gamesPlayed: s.gamesPlayed,
+  playersTonight: s.playersTonight,
+  bestStreak: s.bestStreak,
+  games: s.games,
+});
+
+// Marks time up on the clock if the 12 minutes have run out (keeps the score at the buzzer)
+const withBuzzer = (prev: GameState, now: number) => {
+  const c = prev.clock;
+  if (c.buzzerScore || timeLeft(c, now) > 0) return c;
+  return { ...c, remainingMs: 0, runningSince: null, buzzerScore: { ...prev.score } };
+};
 const ARCHIVE_LIMIT = 60; // Most recent finished nights kept on this device
 
 // Create the context
@@ -222,6 +260,8 @@ const GameContext = createContext<GameContextProps | undefined>(undefined);
 // initialRegulars gives the sample a made-up list to tap; only the real session saves its list.
 export function GameProvider({ children, initialState, persistKey, initialRegulars }: { children: React.ReactNode; initialState?: Partial<GameState>; persistKey?: string; initialRegulars?: Regular[] }) {
   const [gameState, setGameState] = useState<GameState>(() => ({ ...defaultGameState, ...initialState }));
+  const stateRef = useRef(gameState);
+  stateRef.current = gameState;
   const regularsKey = persistKey ? `${persistKey}-regulars` : null;
   const archiveKey = persistKey ? `${persistKey}-archive` : null;
   const [regulars, setRegulars] = useState<Regular[]>(() => (regularsKey ? readList<Regular>(regularsKey) : initialRegulars ?? []));
@@ -278,8 +318,8 @@ export function GameProvider({ children, initialState, persistKey, initialRegula
       restoringRef.current = false;
       pendingLabelRef.current = null;
     } else if (sig !== lastSignatureRef.current && lastStableRef.current) {
-      const entry = { state: lastStableRef.current, label: pendingLabelRef.current || 'Last change' };
-      historyRef.current = [...historyRef.current.slice(-29), entry];
+      const entry = { state: lastStableRef.current, label: pendingLabelRef.current || 'Last change', at: Date.now() };
+      historyRef.current = [...historyRef.current.slice(-(UNDO_STEPS - 1)), entry];
       setHistory(historyRef.current);
       pendingLabelRef.current = null;
     }
@@ -288,7 +328,7 @@ export function GameProvider({ children, initialState, persistKey, initialRegula
   }, [gameState]);
 
   // ---- Save the night (real session only) ----
-  const [savedSession, setSavedSession] = useState<{ savedAt: number; state: GameState; history: UndoStep[] } | null>(
+  const [savedSession, setSavedSession] = useState<{ savedAt: number; lastSeen: number; state: GameState; history: UndoStep[] } | null>(
     () => (persistKey ? readSavedSession(persistKey) : null)
   );
 
@@ -297,7 +337,7 @@ export function GameProvider({ children, initialState, persistKey, initialRegula
     if (!persistKey || savedSession || !isStable(gameState.status)) return;
     let ok = true;
     try {
-      if (countPlayers(gameState) === 0) {
+      if (!hasNight(gameState)) {
         window.localStorage.removeItem(persistKey);
       } else {
         const steps = historyRef.current.slice(-SAVED_UNDO_STEPS);
@@ -314,6 +354,23 @@ export function GameProvider({ children, initialState, persistKey, initialRegula
     }
     setSaveStatus(ok ? 'saved' : 'failed');
   }, [gameState, persistKey, savedSession]);
+
+  // While the game clock runs, note the time now and then and when the page is hidden or closed
+  const clockRunning = gameState.clock.runningSince !== null;
+  useEffect(() => {
+    if (!persistKey || savedSession || !clockRunning) return;
+    const beat = () => { try { window.localStorage.setItem(heartbeatKey(persistKey), String(Date.now())); } catch { /* blocked */ } };
+    beat();
+    const id = setInterval(beat, 3000);
+    const onHide = () => { if (document.visibilityState === 'hidden') beat(); };
+    window.addEventListener('pagehide', beat);
+    document.addEventListener('visibilitychange', onHide);
+    return () => {
+      clearInterval(id);
+      window.removeEventListener('pagehide', beat);
+      document.removeEventListener('visibilitychange', onHide);
+    };
+  }, [persistKey, savedSession, clockRunning]);
 
   // Saved regulars and finished nights stay on this device (real session only)
   useEffect(() => {
@@ -388,7 +445,7 @@ export function GameProvider({ children, initialState, persistKey, initialRegula
     const known = regulars.find(r => r.name.toLowerCase() === trimmedName.toLowerCase());
     const rid = known ? known.id : uuidv4();
     const playerName = known ? known.name : trimmedName;
-    const night = gameState.sessionStartedAt ?? Date.now();
+    const night = gameState.nightId ?? uuidv4();
     setRegulars(list => {
       const existing = list.find(r => r.id === rid);
       if (!existing) return [...list, { id: rid, name: playerName, nights: 1, lastNight: night }];
@@ -406,7 +463,8 @@ export function GameProvider({ children, initialState, persistKey, initialRegula
     pendingLabelRef.current = `Added ${playerName}`;
     setGameState(prev => {
       const updatedState = { ...prev };
-      updatedState.sessionStartedAt = prev.sessionStartedAt ?? night;
+      updatedState.sessionStartedAt = prev.sessionStartedAt ?? Date.now();
+      updatedState.nightId = prev.nightId ?? night;
       updatedState.playersTonight = prev.playersTonight.some(n => n.toLowerCase() === trimmedName.toLowerCase())
         ? prev.playersTonight
         : [...prev.playersTonight, playerName];
@@ -850,7 +908,7 @@ export function GameProvider({ children, initialState, persistKey, initialRegula
   }, []);
 
   // Step 1: Process Game End (Initial setup)
-  const processGameEnd = (winningTeam: Player[], losingTeam: Player[], winnerSide: 'champions' | 'challengers', startedAt: number | null) => {
+  const processGameEnd = (winningTeam: Player[], losingTeam: Player[], winnerSide: 'champions' | 'challengers', startedAt: number | null, endedBy: EndedBy = 'manual') => {
     console.log("[processGameEnd - Step 1] Start");
     console.log("[processGameEnd - Step 1] Winners:", winningTeam);
     console.log("[processGameEnd - Step 1] Losers:", losingTeam);
@@ -899,13 +957,19 @@ export function GameProvider({ children, initialState, persistKey, initialRegula
         bestStreak,
         lastResultAt: Date.now(),
         games: [...prev.games, {
+          id: uuidv4(),
           n: prev.games.length + 1,
           startedAt,
           endedAt: Date.now(),
           winner: winnerSide,
           winners: winningTeam.map(ref),
           losers: losingTeam.map(ref),
+          ...(prev.score.champions + prev.score.challengers > 0 ? { final: { ...prev.score } } : {}),
+          endedBy,
         } as GameRecord],
+        // Fresh scoreboard for the next game, even when the same ten run it back
+        score: newScore(),
+        clock: newClock(),
         champions: [], // Clear current teams
         challengers: [],
         waitingQueue: [], // Clear queue, will be rebuilt in next step
@@ -1198,7 +1262,7 @@ export function GameProvider({ children, initialState, persistKey, initialRegula
 
 
   // Handle game end
-  const handleGameEnd = (winner: 'champions' | 'challengers') => {
+  const handleGameEnd = (winner: 'champions' | 'challengers', endedBy: EndedBy = 'manual') => {
     // First check if teams are complete
     if (gameState.champions.length !== 5 || gameState.challengers.length !== 5) {
       setErrorMessage("Both teams must have 5 players before starting a new game.");
@@ -1228,7 +1292,7 @@ export function GameProvider({ children, initialState, persistKey, initialRegula
         const winningTeam = winner === 'champions' ? gameState.champions : gameState.challengers;
         const losingTeam = winner === 'champions' ? gameState.challengers : gameState.champions;
         pendingLabelRef.current = resultLabel;
-        processGameEnd(winningTeam, losingTeam, winner, startedAt);
+        processGameEnd(winningTeam, losingTeam, winner, startedAt, endedBy);
       }, 50);
       return;
     }
@@ -1252,7 +1316,7 @@ export function GameProvider({ children, initialState, persistKey, initialRegula
       elapsedMinutes: 0
     }));
 
-    processGameEnd(winningTeam, losingTeam, winner, startedAt); // Start the multi-step process
+    processGameEnd(winningTeam, losingTeam, winner, startedAt, endedBy); // Start the multi-step process
   };
 
   const dismissShootoutModal = useCallback(() => {
@@ -1323,6 +1387,7 @@ export function GameProvider({ children, initialState, persistKey, initialRegula
   }, []);
 
   const undo = useCallback(() => {
+    const current = stateRef.current;
     const steps = historyRef.current;
     if (steps.length === 0) return;
     const entry = steps[steps.length - 1];
@@ -1332,44 +1397,125 @@ export function GameProvider({ children, initialState, persistKey, initialRegula
     stopGameTimer();
     setInfoModalState({ isOpen: false, message: '' });
     setSelectedPlayerId(null);
-    setGameState(entry.state);
+    // Undoing a basket keeps the clock as it is now. Undoing a result brings back that game's
+    // final score with the clock paused where it was.
+    const sameGame = entry.state.games.length === current.games.length;
+    const c = entry.state.clock;
+    const clock = sameGame
+      ? current.clock
+      : c.runningSince === null ? c : { ...c, remainingMs: timeLeft(c, entry.at ?? Date.now()), runningSince: null };
+    setGameState({ ...entry.state, clock });
     if (entry.state.gameStartTime) resumeGameTimer();
   }, [stopGameTimer, resumeGameTimer]);
+
+  // ---- Scoreboard ----
+
+  const addPoints = useCallback((side: Side, points: number, correction = false) => {
+    const s = stateRef.current;
+    if (s.champions.length !== 5 || s.challengers.length !== 5 || !isStable(s.status) || s.status === 'SHOOTOUT') return;
+    const now = Date.now();
+    const clockNow = withBuzzer(s, now);
+    // Once a game is decided, only corrections change the score
+    if (decide(s.score, clockNow, now).winner && !correction) return;
+    const next = Math.max(0, s.score[side] + points);
+    if (next === s.score[side]) return;
+    const team = side === 'champions' ? 'Champions' : 'Challengers';
+    pendingLabelRef.current = `${points > 0 ? '+' : '−'}${Math.abs(points)} ${team}`;
+    setGameState(prev => {
+      let clock = withBuzzer(prev, now);
+      const score = { ...prev.score, [side]: Math.max(0, prev.score[side] + points) };
+      // A basket that decides the game stops the clock
+      if (decide(score, clock, now).winner && clock.runningSince !== null) {
+        clock = { ...clock, remainingMs: timeLeft(clock, now), runningSince: null };
+      }
+      return { ...prev, score, clock };
+    });
+  }, []);
+
+  const startClock = useCallback(() => {
+    setGameState(prev => {
+      const c = prev.clock;
+      if (c.runningSince !== null || c.buzzerScore || c.remainingMs <= 0) return prev;
+      if (decide(prev.score, c).winner) return prev;
+      return { ...prev, clock: { ...c, runningSince: Date.now() } };
+    });
+  }, []);
+
+  const pauseClock = useCallback(() => {
+    setGameState(prev => {
+      const c = prev.clock;
+      if (c.runningSince === null) return prev;
+      const now = Date.now();
+      const clock = withBuzzer(prev, now);
+      return { ...prev, clock: clock.runningSince === null ? clock : { ...c, remainingMs: timeLeft(c, now), runningSince: null } };
+    });
+  }, []);
+
+  // Fix the clock while it's stopped (a forgotten start, or left running)
+  const adjustClock = useCallback((deltaMs: number) => {
+    setGameState(prev => {
+      const c = prev.clock;
+      if (c.runningSince !== null) return prev;
+      const remainingMs = Math.max(0, Math.min(c.lengthMs, c.remainingMs + deltaMs));
+      const buzzerScore = remainingMs > 0 ? null : c.buzzerScore ?? { ...prev.score };
+      return { ...prev, clock: { ...c, remainingMs, buzzerScore } };
+    });
+  }, []);
+
+  // Time runs out: stop the clock and keep the score at the buzzer
+  useEffect(() => {
+    const c = gameState.clock;
+    if (c.runningSince === null || c.buzzerScore) return;
+    const id = setTimeout(() => {
+      setGameState(prev => {
+        const cl = prev.clock;
+        if (cl.runningSince === null || cl.buzzerScore || timeLeft(cl) > 0) return prev;
+        return { ...prev, clock: withBuzzer(prev, Date.now()) };
+      });
+    }, timeLeft(c) + 50);
+    return () => clearTimeout(id);
+  }, [gameState.clock]);
 
   const resumeSession = useCallback(() => {
     if (!savedSession) return;
     restoringRef.current = true;
     historyRef.current = savedSession.history;
     setHistory(savedSession.history);
-    setGameState(savedSession.state);
+    const c = savedSession.state.clock;
+    const clock = c.runningSince === null ? c : { ...c, remainingMs: timeLeft(c, savedSession.lastSeen), runningSince: null };
+    setGameState({ ...savedSession.state, clock });
     setSavedSession(null);
     if (savedSession.state.gameStartTime) resumeGameTimer();
   }, [savedSession, resumeGameTimer]);
 
+  // Adds a night to Past nights on this device. Returns false if it couldn't be stored.
+  const archiveNight = useCallback((summary: NightSummary): boolean => {
+    if (!archiveKey) return true;
+    const next = [summary, ...archive.filter(n => n.id !== summary.id)].slice(0, ARCHIVE_LIMIT);
+    if (!writeList(archiveKey, next)) return false;
+    setArchive(next);
+    return true;
+  }, [archive, archiveKey]);
+
+  // Start fresh: a saved night that has results goes to Past nights first, so nothing is lost
   const discardSavedSession = useCallback(() => {
+    if (savedSession && savedSession.state.games.length > 0) archiveNight(summarize(savedSession.state));
     if (persistKey) {
-      try { window.localStorage.removeItem(persistKey); } catch { /* ignore */ }
+      try { window.localStorage.removeItem(persistKey); window.localStorage.removeItem(heartbeatKey(persistKey)); } catch { /* ignore */ }
     }
     setSavedSession(null);
-  }, [persistKey]);
+  }, [persistKey, savedSession, archiveNight]);
 
   // Finish night: keep a summary of tonight on this device, then clear the courts for next time.
-  const finishNight = useCallback((): NightSummary | null => {
+  // Nothing is cleared unless the summary was stored first.
+  const finishNight = useCallback((): { ok: true; summary: NightSummary } | { ok: false; reason: 'nothing' | 'busy' | 'storage' } => {
     const s = gameState;
-    if (!isStable(s.status) || (s.games.length === 0 && countPlayers(s) === 0)) return null;
-    const summary: NightSummary = {
-      id: uuidv4(),
-      startedAt: s.sessionStartedAt,
-      endedAt: Date.now(),
-      gamesPlayed: s.gamesPlayed,
-      playersTonight: s.playersTonight,
-      bestStreak: s.bestStreak,
-      games: s.games,
-    };
-    if (archiveKey) {
-      const next = [summary, ...archive].slice(0, ARCHIVE_LIMIT);
-      setArchive(next);
-      if (!writeList(archiveKey, next)) setSaveStatus('failed');
+    if (!isStable(s.status) || s.status === 'SHOOTOUT') return { ok: false, reason: 'busy' };
+    if (!hasNight(s)) return { ok: false, reason: 'nothing' };
+    const summary = summarize(s);
+    if (!archiveNight(summary)) {
+      setSaveStatus('failed');
+      return { ok: false, reason: 'storage' };
     }
     stopGameTimer();
     restoringRef.current = true;
@@ -1378,8 +1524,8 @@ export function GameProvider({ children, initialState, persistKey, initialRegula
     setSelectedPlayerId(null);
     setLastAdded(null);
     setGameState({ ...defaultGameState });
-    return summary;
-  }, [gameState, archive, archiveKey, stopGameTimer]);
+    return { ok: true, summary };
+  }, [gameState, archiveNight, stopGameTimer]);
 
   const value: GameContextProps = {
     gameState,
@@ -1403,7 +1549,7 @@ export function GameProvider({ children, initialState, persistKey, initialRegula
     undo,
     canUndo: history.length > 0,
     undoLabel: history.length > 0 ? history[history.length - 1].label : null,
-    pendingResume: savedSession ? { savedAt: savedSession.savedAt, players: countPlayers(savedSession.state) } : null,
+    pendingResume: savedSession ? { savedAt: savedSession.savedAt, players: countPlayers(savedSession.state), games: savedSession.state.games.length } : null,
     resumeSession,
     discardSavedSession,
     movePlayerIntoGroup,
@@ -1412,6 +1558,10 @@ export function GameProvider({ children, initialState, persistKey, initialRegula
     regulars,
     forgetRegular,
     lastAdded,
+    addPoints,
+    startClock,
+    pauseClock,
+    adjustClock,
     saveStatus,
     otherTabOpen: otherTabs.length > 0,
     finishNight,
