@@ -109,7 +109,7 @@ const SignInSheet: React.FC<{ onClose: () => void; isSample?: boolean }> = ({ on
         <div aria-live="polite" className="px-6 min-h-[4.5rem] flex items-center">
           {confirm ? (
             <div className="w-full mt-3 rounded-xl bg-[#FFF7DB] border-2 border-[#F5B301] px-4 py-3">
-              <span className="text-xl font-extrabold text-[#1B2430]">You're in, {confirm.name}.</span>
+              <span className="text-xl font-extrabold text-[#1B2430]">You're in, {confirm.name}{/\.$/.test(confirm.name) ? '' : '.'}</span>
               {confirm.spot && <span className="text-xl font-semibold text-[#1B2430]"> {confirm.spot}.</span>}
             </div>
           ) : error ? (
