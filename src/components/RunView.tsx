@@ -355,7 +355,8 @@ const NowPlaying: React.FC<{ state: PublicState; skewMs: number; now: number }> 
           </div>
         ) : startedAt ? (
           <div className="text-right">
-            <div className="text-xs font-semibold text-gray-500">Game clock</div>
+            {/* The scoreboard clock isn't running, so this counts up from tip-off */}
+            <div className="text-xs font-semibold text-gray-500">Playing for</div>
             <div className="text-3xl font-black tabular-nums leading-none">{elapsed(now - startedAt)}</div>
           </div>
         ) : null)}

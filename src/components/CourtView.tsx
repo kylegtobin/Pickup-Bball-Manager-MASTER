@@ -181,7 +181,7 @@ const CourtView: React.FC<{ onClose: () => void; isSample?: boolean; viewer?: bo
 
   // The middle of the scoreboard: countdown when the score is being kept, otherwise the game clock
   let clockText = '--:--';
-  let status: { text: string; kind: '' | 'alert' | 'win' } = { text: gameOn ? 'Game clock' : 'Waiting for 10 players', kind: '' };
+  let status: { text: string; kind: '' | 'alert' | 'win' } = { text: gameOn ? 'Playing for' : 'Waiting for 10 players', kind: '' };
   if (scoring) {
     clockText = formatCountdown(timeLeft(clock, now));
     status = outcome.nextBucket ? { text: 'Next bucket wins', kind: 'alert' }

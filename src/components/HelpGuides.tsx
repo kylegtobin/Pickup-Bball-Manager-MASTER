@@ -21,6 +21,7 @@ const I = {
   move: 'M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3',
   chart: 'M4 20V10M10 20V4M16 20v-7M22 20H2',
   save: 'M5 3h11l3 3v15H5zM8 3v5h7V3M8 21v-7h8v7',
+  phone: 'M8 2h8a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2M11 18h2',
 };
 const Head: React.FC<{ icon: keyof typeof I; tone?: '' | 'o' | 'g' | 'd'; children: React.ReactNode }> = ({ icon, tone = '', children }) => (
   <div className="gd-h"><span className={`gd-ico ${tone}`}><Icon d={I[icon]} /></span><h3>{children}</h3></div>
@@ -148,6 +149,22 @@ export const UserGuide: React.FC = () => (
           <li>Download a recap image for the group chat, or a backup.</li>
           <li><strong>Finish night</strong> saves it to Past nights and clears the courts.</li>
         </ul>
+      </section>
+
+      <section className="gd-card wide">
+        <Head icon="phone" tone="o">Follow on your phone</Head>
+        <div className="gd-two">
+          <ul className="gd-list">
+            <li>Open <strong>pickupbasketballmanager.com</strong> on your phone. It goes straight to tonight's run. No app, no account.</li>
+            <li>Or scan the <strong>QR</strong> or type the <strong>6-letter code</strong> from the court screen.</li>
+            <li>See who's playing, the score, and the line. Type your name in <strong>Where am I?</strong> to find your spot.</li>
+            <li><strong>Stats</strong> for tonight and every run. Tap a name for that player's page.</li>
+          </ul>
+          <ul className="gd-list n">
+            <li>Running the night? Tap <strong>Phone view</strong> and sign in once with your email.</li>
+            <li><strong>Pause sharing</strong> stops updates. <strong>Reset link</strong> makes a new link and code and cuts off the old ones.</li>
+          </ul>
+        </div>
       </section>
 
       <section className="gd-card wide">
