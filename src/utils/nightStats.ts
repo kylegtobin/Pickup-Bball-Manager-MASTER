@@ -23,8 +23,8 @@ const leader = (rows: { name: string; n: number }[]): Leader | null => {
   const top = Math.max(0, ...rows.map(r => r.n));
   if (top === 0) return null;
   const names = rows.filter(r => r.n === top).map(r => r.name);
-  // Shared by more than 3 people isn't much of a shout-out, so leave it out
-  if (names.length > 3) return null;
+  // A team of 5 can share it; more than that (half the gym) isn't much of a shout-out
+  if (names.length > 5) return null;
   return { count: top, names };
 };
 
