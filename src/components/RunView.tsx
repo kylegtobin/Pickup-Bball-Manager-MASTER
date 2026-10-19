@@ -7,7 +7,7 @@ import { PublicState, PublicPlayer, PublicQueueItem } from '../cloud/publicState
 import { previewNextUp } from '../utils/formChallengers';
 import { calculateGamesBehindIndividual } from '../utils/waitTimeUtils';
 import { decide, timeLeft, clockState, formatClock, endedByText, Clock } from '../utils/score';
-import { joinNames } from '../utils/nightStats';
+import { joinNames, awardNames } from '../utils/nightStats';
 import { WaitingQueueItem } from '../types';
 
 // The phone page for a run link (?run=…): what's on the courtside screen, live, plus the run's stats.
@@ -170,7 +170,7 @@ const Awards: React.FC<{ games: ViewGame[] }> = ({ games }) => {
       {awards.map(a => (
         <div key={a.title} className="rounded-xl bg-[#FFF3EA] border border-[#FFD2B5] px-2.5 py-2 min-w-0">
           <p className="text-[11px] font-bold uppercase tracking-wide text-[#C94E00]">{a.title}</p>
-          <p className="text-sm font-bold leading-tight line-clamp-2">{a.names.length > 2 ? `${a.names[0]} + ${a.names.length - 1} more` : a.names.join(' & ')}</p>
+          <p className="text-sm font-bold leading-tight line-clamp-2">{awardNames(a.names)}</p>
           <p className="text-xs text-gray-600">{a.value}</p>
         </div>
       ))}
