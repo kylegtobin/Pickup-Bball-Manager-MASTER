@@ -1,5 +1,5 @@
 import { NightSummary } from '../types';
-import { nightLeaders, joinNames } from './nightStats';
+import { nightLeaders, awardNames } from './nightStats';
 
 const W = 1080;
 const H = 1350;
@@ -19,6 +19,26 @@ const fitText = (ctx: CanvasRenderingContext2D, text: string, maxWidth: number, 
     ctx.font = `${weight} ${s}px ${FONT}`;
   }
   return s;
+};
+
+// Splits text into at most maxLines lines that fit maxWidth; the last line ends in "…" if it still doesn't fit
+const wrapLines = (ctx: CanvasRenderingContext2D, text: string, maxWidth: number, maxLines: number) => {
+  const words = text.split(' ');
+  const lines: string[] = [];
+  let line = '';
+  words.forEach(w => {
+    const next = line ? `${line} ${w}` : w;
+    if (ctx.measureText(next).width <= maxWidth || !line) line = next;
+    else { lines.push(line); line = w; }
+  });
+  if (line) lines.push(line);
+  if (lines.length > maxLines) {
+    lines.length = maxLines;
+    let last = lines[maxLines - 1];
+    while (last.length > 1 && ctx.measureText(`${last}…`).width > maxWidth) last = last.slice(0, -1);
+    lines[maxLines - 1] = `${last.trimEnd()}…`;
+  }
+  return lines;
 };
 
 const drawBall = (ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) => {
@@ -85,22 +105,23 @@ export const drawRecapCard = (night: NightSummary): Promise<Blob | null> => {
   // Highlights
   const { mostWins, mostGames } = nightLeaders(night.games);
   const rows: [string, string, string][] = [];
-  if (night.bestStreak && night.bestStreak.count >= 2) rows.push(['Longest streak', `${night.bestStreak.count} straight wins`, joinNames(night.bestStreak.names, 5)]);
-  if (mostWins) rows.push(['Most wins', `${mostWins.count} ${mostWins.count === 1 ? 'win' : 'wins'}`, joinNames(mostWins.names)]);
-  if (mostGames) rows.push(['Iron man', `${mostGames.count} games`, joinNames(mostGames.names)]);
+  if (night.bestStreak && night.bestStreak.count >= 2) rows.push(['Longest streak', `${night.bestStreak.count} straight wins`, awardNames(night.bestStreak.names)]);
+  if (mostWins) rows.push(['Most wins', `${mostWins.count} ${mostWins.count === 1 ? 'win' : 'wins'}`, awardNames(mostWins.names)]);
+  if (mostGames) rows.push(['Iron man', `${mostGames.count} games`, awardNames(mostGames.names)]);
 
-  let y = 700;
+  // Every row is the same: label and value on one line, names below at one size, wrapping onto a
+  // second line if they have to (never under the value, which sits on the line above)
+  let y = 690;
   rows.slice(0, 3).forEach(([title, value, names]) => {
     ctx.fillStyle = AMBER; ctx.font = `800 32px ${FONT}`; ctx.fillText(title.toUpperCase(), pad, y);
-    ctx.fillStyle = '#fff';
-    ctx.font = `900 54px ${FONT}`;
-    const valueW = ctx.measureText(value).width;
-    ctx.fillText(value, W - pad - valueW, y + 4);
-    const nameSize = fitText(ctx, names, W - pad * 2 - valueW - 40, '800', 54, 30);
-    ctx.font = `800 ${nameSize}px ${FONT}`;
-    ctx.fillText(names, pad, y + 66);
-    ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(pad, y + 104, W - pad * 2, 3);
-    y += 170;
+    ctx.fillStyle = '#fff'; ctx.font = `900 44px ${FONT}`;
+    ctx.fillText(value, W - pad - ctx.measureText(value).width, y);
+    ctx.font = `800 48px ${FONT}`;
+    const lines = wrapLines(ctx, names, W - pad * 2, 2);
+    lines.forEach((l, i) => ctx.fillText(l, pad, y + 60 + i * 54));
+    const bottom = y + 60 + (lines.length - 1) * 54 + 30;
+    ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(pad, bottom, W - pad * 2, 3);
+    y = bottom + 52;  // three rows of two-line names still end above the footer
   });
   if (rows.length === 0) {
     ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.font = `700 40px ${FONT}`;

@@ -36,6 +36,14 @@ export const nightLeaders = (games: GameRecord[]) => {
   };
 };
 
+// Names for an award, the same everywhere (the recap image, the recap and the phone's awards card):
+// "Ben", "Ben & Rico", then "Ben + 4 more" once there are 3 or more. Alphabetical, so the same players
+// always read the same way wherever they show up.
+export const awardNames = (list: string[]) => {
+  const names = [...list].sort((a, b) => a.localeCompare(b));
+  return names.length <= 1 ? (names[0] ?? '') : names.length === 2 ? `${names[0]} & ${names[1]}` : `${names[0]} +\u00A0${names.length - 1}\u00A0more`; // "+ 4 more" never splits across lines
+};
+
 // "Ben", "Ben & Rico", "Ben, Rico & 2 more"
 export const joinNames = (names: string[], max = 3) => {
   if (names.length <= 1) return names[0] ?? '';
