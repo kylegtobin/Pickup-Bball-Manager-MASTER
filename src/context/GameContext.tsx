@@ -92,6 +92,8 @@ export interface GameContextProps {
   // Saving: 'off' for the sample, 'failed' if this browser won't store the night
   saveStatus: 'saved' | 'failed' | 'off';
   otherTabOpen: boolean;
+  // Another tab was open first, so this is the extra one that should close
+  olderTabOpen: boolean;
   // Finish night: archive tonight on this device and clear the courts
   finishNight: () => { ok: true; summary: NightSummary } | { ok: false; reason: 'nothing' | 'busy' | 'storage' };
   archive: NightSummary[];
@@ -242,7 +244,8 @@ export function GameProvider({ children, initialState, persistKey, initialRegula
   }, [regulars, regularsKey]);
 
   // Two tabs on one device would save over each other, so say so when a second one opens
-  const [otherTabs, setOtherTabs] = useState<string[]>([]);
+  // older: that tab was already open when this one started (it answered our hello)
+  const [otherTabs, setOtherTabs] = useState<{ id: string; older: boolean }[]>([]);
   useEffect(() => {
     if (!persistKey || typeof BroadcastChannel === 'undefined') return;
     const me = uuidv4();
@@ -250,8 +253,11 @@ export function GameProvider({ children, initialState, persistKey, initialRegula
     channel.onmessage = (e: MessageEvent) => {
       const { type, id } = e.data || {};
       if (!id || id === me) return;
-      if (type === 'bye') { setOtherTabs(list => list.filter(x => x !== id)); return; }
-      setOtherTabs(list => (list.includes(id) ? list : [...list, id]));
+      if (type === 'bye') { setOtherTabs(list => list.filter(x => x.id !== id)); return; }
+      const older = type === 'here';
+      setOtherTabs(list => (list.some(x => x.id === id)
+        ? list.map(x => (x.id === id && older ? { ...x, older: true } : x))
+        : [...list, { id, older }]));
       if (type === 'hello') channel.postMessage({ type: 'here', id: me });
     };
     channel.postMessage({ type: 'hello', id: me });
@@ -1509,6 +1515,7 @@ export function GameProvider({ children, initialState, persistKey, initialRegula
     adjustClock,
     saveStatus,
     otherTabOpen: otherTabs.length > 0,
+    olderTabOpen: otherTabs.some(x => x.older),
     finishNight,
     archive,
     restoreNight,
