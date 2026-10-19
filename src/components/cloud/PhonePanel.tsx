@@ -53,7 +53,7 @@ const PhonePanel: React.FC<{ cloud: CloudController; onClose: () => void }> = ({
         {sent && (
           <div className="rounded-xl bg-[#EDEFF2] p-3 space-y-1" role="status">
             <p className="font-bold">Check your email on this computer.</p>
-            <p className="text-sm text-gray-700">Open the email from Supabase and click <strong>Sign in</strong>. It brings you back here signed in. This computer stays signed in after that.</p>
+            <p className="text-sm text-gray-700">Open the email from <strong>Pickup Basketball Manager</strong> and tap <strong>Sign in</strong>. It brings you back here signed in, and this computer stays signed in after that. Not there? Check spam.</p>
           </div>
         )}
         {sent && (
