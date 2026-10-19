@@ -205,7 +205,7 @@ const Scoreboard: React.FC<{ stickyTop: string; active?: boolean; quietPopup?: b
                 onClick={() => { setDismissed(decidedKey); setFixing(true); }}
                 className="w-full py-3 rounded-xl border border-[#D5DAE1] text-[#1B2430] text-lg font-bold hover:bg-gray-50"
               >
-                Correct score
+                Score wrong? Fix it
               </button>
             </div>
             <p className="text-sm text-gray-500 mt-4">Recording rotates the line like the {TEAM[outcome.winner].name} Won button.</p>

@@ -259,7 +259,7 @@ const CourtView: React.FC<{ onClose: () => void; isSample?: boolean; viewer?: bo
               <>
                 <span className="note">{outcome.winner === 'champions' ? 'Champions' : 'Challengers'} win {Math.max(score.champions, score.challengers)}–{Math.min(score.champions, score.challengers)}</span>
                 <button ref={recordRef} className="cb-scorebtn record" disabled={recording} onClick={() => { if (!recording && outcome.winner) { setRecording(true); handleGameEnd(outcome.winner, outcome.endedBy ?? 'points'); } }}>Record result</button>
-                <button className="cb-scorebtn light" onClick={() => setFixing(true)}>Correct score</button>
+                <button className="cb-scorebtn light" onClick={() => setFixing(true)}>Score wrong? Fix it</button>
               </>
             ) : (
               <>
