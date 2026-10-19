@@ -5,7 +5,7 @@ import { isShown } from './visibility';
 const stack: HTMLElement[] = [];
 
 const focusables = (el: HTMLElement) =>
-  Array.from(el.querySelectorAll<HTMLElement>('button:not([disabled]), [href], input:not([disabled]), select, textarea, [tabindex]:not([tabindex="-1"])'))
+  Array.from(el.querySelectorAll<HTMLElement>('button:not([disabled]), [href], input:not([disabled]), select, textarea, video[controls], audio[controls], [tabindex]:not([tabindex="-1"])'))
     .filter(x => x.offsetParent !== null || x === document.activeElement);
 
 // Moves focus into a dialog, keeps Tab inside it, and puts focus back where it was on close
