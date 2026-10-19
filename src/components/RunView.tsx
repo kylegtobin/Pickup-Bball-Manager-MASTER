@@ -538,6 +538,7 @@ const RunView: React.FC<{ token: string; fetcher?: (t: string) => Promise<FetchR
             {night?.startedAt ? `Last run: ${dayName(night.startedAt + view.serverOffsetMs)}. ` : ''}
             This page updates on its own when the next one starts.
           </p>
+          {!ended && <p className="text-gray-600 mt-2">To get in line, sign in on the courtside computer.</p>}
         </Card>
       )}
 

@@ -156,7 +156,7 @@ export const UserGuide: React.FC = () => (
         <div className="gd-two">
           <ul className="gd-list">
             <li>Open <strong>pickupbasketballmanager.com</strong> on your phone. It goes straight to tonight's run. No app, no account.</li>
-            <li>Or scan the <strong>QR</strong> or type the <strong>6-letter code</strong> from the court screen.</li>
+            <li>Or scan the <strong>QR</strong> or type the <strong>6-character code</strong> from the court screen.</li>
             <li>See who's playing, the score, and the line. Type your name in <strong>Where am I?</strong> to find your spot.</li>
             <li><strong>Stats</strong> for tonight and every run. Tap a name for that player's page.</li>
           </ul>
@@ -173,7 +173,7 @@ export const UserGuide: React.FC = () => (
           <ul className="gd-list">
             <li>Turn on <strong>Manual mode</strong>, tap a player, then tap where they go. Dragging works too.</li>
             <li>Tap a group's name to move the whole group.</li>
-            <li>Someone hurt? Move them to the end of the line, then tap the next player and tap the open spot.</li>
+            <li>Someone hurt? Move them to the end of the line, or <strong>Remove</strong> them if they're done for the night. Then tap the next player and tap the open spot.</li>
             <li>A player who comes on mid-game is marked <strong>Sub</strong>. If their team loses, they go to the front of the line.</li>
           </ul>
           <ul className="gd-list">
@@ -211,7 +211,7 @@ export const MyStory: React.FC<{ photos: [string, string] }> = ({ photos }) => (
     <div className="st-hero">
       <p className="st-eyebrow">Hi, I'm Kyle Tobin</p>
       <h3 className="st-title">Less arguing, <span>more ballin’.</span></h3>
-      <p className="st-lede">I play pickup at Midtown Athletic Club in Chicago, and I designed and built this site so the run takes care of itself.</p>
+      <p className="st-lede">I play pickup at Midtown Athletic Club in Chicago, and I designed and built this site so everyone knows who's next and how long they'll wait.</p>
       <div className="st-chips">
         <span>Multiple-time Midtown League champ</span>
         <span>Midtown Athletic Club regular</span>

@@ -132,9 +132,10 @@ const Scoreboard: React.FC<{ stickyTop: string; active?: boolean; quietPopup?: b
         <div className="text-5xl font-black tabular-nums leading-none text-white" aria-live="polite">{score[side]}</div>
       </div>
     );
+    // Under laptop width, −1 drops below the +1/+2 row so both scores stay on screen while fixing
     return side === 'champions'
-      ? <div className="flex items-center gap-2">{number}{plus(1)}{plus(2)}{fixing && fix}</div>
-      : <div className="flex items-center gap-2 justify-end">{fixing && fix}{plus(1)}{plus(2)}{number}</div>;
+      ? <div className="flex flex-col items-start gap-2 lg:flex-row lg:items-center"><div className="flex items-center gap-2">{number}{plus(1)}{plus(2)}</div>{fixing && fix}</div>
+      : <div className="flex flex-col items-end gap-2 lg:flex-row-reverse lg:items-center"><div className="flex items-center gap-2">{plus(1)}{plus(2)}{number}</div>{fixing && fix}</div>;
   };
 
   return (
@@ -152,13 +153,13 @@ const Scoreboard: React.FC<{ stickyTop: string; active?: boolean; quietPopup?: b
               )}
             </div>
             <div className={`text-sm font-semibold text-center ${outcome.nextBucket ? 'text-[#F5B301]' : decided ? 'text-white' : 'text-white/60'}`}>{statusText}</div>
-            <div className="flex items-center gap-3 text-sm">
+            <div className="flex flex-wrap justify-center items-center gap-2 text-sm">
               {(state === 'paused' || state === 'not-started' || state === 'time') && (
-                <button type="button" onClick={() => setAdjusting(a => !a)} className="h-9 px-3 rounded-md border border-white/30 text-white/80 font-semibold hover:bg-white/10">
+                <button type="button" onClick={() => setAdjusting(a => !a)} className="h-9 px-3 rounded-md border border-white/30 text-white/80 font-semibold hover:bg-white/10 whitespace-nowrap">
                   {adjusting ? 'Done adjusting' : 'Adjust time'}
                 </button>
               )}
-              <button type="button" onClick={() => setFixing(f => !f)} aria-pressed={fixing} className={`h-9 px-3 rounded-md border font-semibold ${fixing ? 'bg-white text-[#0E1A33] border-white' : 'border-white/30 text-white/80 hover:bg-white/10'}`}>
+              <button type="button" onClick={() => setFixing(f => !f)} aria-pressed={fixing} className={`h-9 px-3 rounded-md border font-semibold whitespace-nowrap ${fixing ? 'bg-white text-[#0E1A33] border-white' : 'border-white/30 text-white/80 hover:bg-white/10'}`}>
                 {fixing ? 'Done fixing' : 'Fix score'}
               </button>
               {decided && !showPopup && (
