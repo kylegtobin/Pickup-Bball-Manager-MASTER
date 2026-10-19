@@ -22,7 +22,10 @@ export const playerTotals = (games: GameRecord[]) => {
 const leader = (rows: { name: string; n: number }[]): Leader | null => {
   const top = Math.max(0, ...rows.map(r => r.n));
   if (top === 0) return null;
-  return { count: top, names: rows.filter(r => r.n === top).map(r => r.name) };
+  const names = rows.filter(r => r.n === top).map(r => r.name);
+  // Shared by more than 3 people isn't much of a shout-out, so leave it out
+  if (names.length > 3) return null;
+  return { count: top, names };
 };
 
 export const nightLeaders = (games: GameRecord[]) => {
