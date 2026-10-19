@@ -43,6 +43,7 @@ export const GameRules: React.FC = () => (
         <li><strong>Losers go to the back</strong> of the line together, as a group.</li>
         <li>The <strong>next five</strong> in line step in as the Challengers.</li>
       </ol>
+      <p className="gd-sub mt-2">Subbed in during a game and your team lost? You go to the <strong>front</strong> of the line, not the back.</p>
     </section>
 
     <section className="gd-sec">
@@ -155,7 +156,8 @@ export const UserGuide: React.FC = () => (
           <ul className="gd-list">
             <li>Turn on <strong>Manual mode</strong>, tap a player, then tap where they go. Dragging works too.</li>
             <li>Tap a group's name to move the whole group.</li>
-            <li><strong>Swap</strong> trades a player in line with one on court.</li>
+            <li>Someone hurt? Move them to the end of the line, then tap the next player and tap the open spot.</li>
+            <li>A player who comes on mid-game is marked <strong>Sub</strong>. If their team loses, they go to the front of the line.</li>
           </ul>
           <ul className="gd-list">
             <li>To remove someone: <strong>Remove</strong> in Manual mode, right-click their name, or use the <strong>Name to remove</strong> box. If they come back, they sign in again at the end of the line.</li>
