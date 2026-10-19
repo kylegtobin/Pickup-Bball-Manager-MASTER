@@ -154,6 +154,7 @@ function PickupBasketballApp({ sample, onTrySample, active }: PickupBasketballAp
     undoLabel,
     saveStatus,
     otherTabOpen,
+    olderTabOpen,
     regulars,
     lastAdded
   } = useGame();
@@ -315,7 +316,9 @@ function PickupBasketballApp({ sample, onTrySample, active }: PickupBasketballAp
       {!sample && otherTabOpen && (
         <div role="alert" className="bg-amber-100 border-b-2 border-amber-400 text-gray-900">
           <p className="max-w-6xl mx-auto px-4 py-2.5 text-base">
-            <strong>This app is open in another tab.</strong> Use just one, so the two don't save over each other.
+            {olderTabOpen
+              ? <><strong>This app is already open in another tab.</strong> Close this tab and keep using the other one.</>
+              : <><strong>The app was just opened in another tab.</strong> Keep using this one and close the other.</>}
           </p>
         </div>
       )}
@@ -408,7 +411,7 @@ function PickupBasketballApp({ sample, onTrySample, active }: PickupBasketballAp
         
         {/* Game Controls */}
         <div className="flex flex-wrap justify-between items-center gap-3 mb-4">
-          <div className="flex items-center gap-2">
+          <div className="relative flex items-center gap-2">
             <span className="text-lg font-semibold">Manual mode</span>
             <Switch
               checked={gameState.manualMode}
@@ -434,8 +437,8 @@ function PickupBasketballApp({ sample, onTrySample, active }: PickupBasketballAp
                 aria-label="Second screen"
               >
                 <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="3" width="13" height="9" rx="1.5" /><rect x="10" y="9" width="13" height="9" rx="1.5" fill="white" /><path d="M14 21h5M16.5 18v3" /></svg>
-                {/* With phone view on there's one more button, so the label waits for a wider screen */}
-                <span className={cloud.on && !sample ? 'hidden min-[1440px]:inline' : 'hidden xl:inline'}>Second screen</span>
+                {/* With phone view on there's one more button, so this one is just the icon (the row is 1168px at most) */}
+                <span className={cloud.on && !sample ? 'hidden' : 'hidden xl:inline'}>Second screen</span>
               </button>
             )}
             {cloud.on && !sample && (
@@ -447,30 +450,31 @@ function PickupBasketballApp({ sample, onTrySample, active }: PickupBasketballAp
                 aria-describedby="pbm-phone-status"
               >
                 <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="2" width="12" height="20" rx="2.5" /><path d="M11 18h2" /></svg>
-                <span className="hidden min-[1440px]:inline">Phone view</span>
+                <span className="hidden xl:inline">Phone view</span>
                 {cloudStatus && (
                   <span aria-hidden="true" className={`absolute -top-1 -right-1 h-3 w-3 rounded-full ring-2 ring-white ${cloudStatus.tone === 'ok' ? 'bg-green-500' : cloudStatus.tone === 'warn' ? 'bg-amber-500' : cloudStatus.tone === 'bad' ? 'bg-red-600' : 'bg-gray-400'}`} />
                 )}
                 <span id="pbm-phone-status" className="sr-only">{cloudStatus?.text ?? ''}</span>
               </button>
             )}
-            {saveStatus === 'saved' && !isEmpty && (
-              <span className="ml-3 inline-flex items-center gap-1 text-sm text-gray-500" title="Tonight is saved in this browser as you go">
+            {saveStatus === 'saved' && !isEmpty && !(cloudStatus && (cloudStatus.tone === 'warn' || cloudStatus.tone === 'bad')) && (
+              <span className="absolute right-0 top-full mt-0.5 inline-flex items-center gap-1 whitespace-nowrap text-xs leading-4 text-gray-500" title="Tonight is saved in this browser as you go">
                 <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7" /></svg>
                 Saved
               </span>
             )}
+            {/* Notes sit in a thin line under the buttons, so they never push Undo and the result buttons to a new row */}
             {cloudStatus && (cloudStatus.tone === 'warn' || cloudStatus.tone === 'bad') && (
               <button
                 type="button"
                 onClick={() => setPhoneOpen(true)}
-                className={`ml-3 text-sm font-semibold underline-offset-2 hover:underline ${cloudStatus.tone === 'warn' ? 'text-amber-700' : 'text-red-700'}`}
+                className={`absolute right-0 top-full mt-0.5 whitespace-nowrap text-xs leading-4 font-semibold underline-offset-2 hover:underline ${cloudStatus.tone === 'warn' ? 'text-amber-700' : 'text-red-700'}`}
               >
                 {cloudStatus.text}
               </button>
             )}
             {saveStatus === 'failed' && (
-              <span className="ml-3 text-sm font-semibold text-red-700" role="status" title="This browser won't let the app save. Tonight still runs but won't survive a refresh.">
+              <span className="absolute left-0 top-full mt-0.5 whitespace-nowrap text-xs leading-4 font-semibold text-red-700" role="status" title="This browser won't let the app save. Tonight still runs but won't survive a refresh.">
                 Not saving on this device
               </span>
             )}
