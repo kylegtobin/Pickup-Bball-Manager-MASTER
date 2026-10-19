@@ -16,13 +16,28 @@ const formatSavedAt = (savedAt: number): string => {
 
 // Shown when the real session finds a night saved on this device (after a refresh, a closed tab or a crash).
 const ResumePrompt: React.FC = () => {
-  const { pendingResume, resumeSession, discardSavedSession, downloadSavedBackup } = useGame();
+  const { pendingResume, resumeSession, discardSavedSession, downloadSavedBackup, olderTabOpen } = useGame();
+  const [otherTabGone, setOtherTabGone] = React.useState(false);
   const [confirmFresh, setConfirmFresh] = React.useState(false);
   const [couldntSave, setCouldntSave] = React.useState(false);
   const dialogRef = React.useRef<HTMLDivElement>(null);
   useDialogFocus(dialogRef, !!pendingResume);
 
   if (!pendingResume) return null;
+
+  // A second tab: the night is live in the first one, so don't offer to resume or wipe it here
+  if (olderTabOpen && !otherTabGone) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="absolute inset-0 bg-black/50" />
+        <div ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="resume-title" className="relative outline-none bg-white rounded-xl shadow-xl max-w-md w-full p-6 border-t-[10px] border-[#F5B301]">
+          <h2 id="resume-title" className="text-2xl font-bold text-[#1B2430]">This night is open in another tab</h2>
+          <p className="mt-3 text-lg text-gray-700">Close this tab and keep using the other one, so the two don't save over each other.</p>
+          <button onClick={() => setOtherTabGone(true)} className="mt-5 text-sm font-semibold text-[#1E3A8A] underline">I closed the other tab</button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">

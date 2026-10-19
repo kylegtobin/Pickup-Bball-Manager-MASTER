@@ -145,7 +145,7 @@ const RecapModal: React.FC<{ onClose: () => void; isSample?: boolean }> = ({ onC
                 </div>
               </div>
               <dl className="mt-5 space-y-3">
-                {bestStreak && (
+                {bestStreak && bestStreak.count >= 2 && (
                   <div>
                     <dt className="font-bold text-[#1B2430]">Longest streak: {bestStreak.count} straight {bestStreak.count === 1 ? 'win' : 'wins'}</dt>
                     <dd className="text-gray-700">{bestStreak.names.join(', ')}</dd>
