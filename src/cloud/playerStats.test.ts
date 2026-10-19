@@ -81,9 +81,10 @@ describe('player stats', () => {
     expect(nightAwards([])).toEqual([]);
   });
 
-  test('no award when more than 3 people share it', () => {
-    const awards = nightAwards([g('n1', 'champions', ['A', 'B', 'C', 'D', 'E'], ['F', 'G', 'H', 'I', 'J'])]);
-    expect(awards).toEqual([]);
+  test('a team of 5 can share an award, but not 10 people', () => {
+    const one = nightAwards([g('n1', 'champions', ['A', 'B', 'C', 'D', 'E'], ['F', 'G', 'H', 'I', 'J'])]);
+    expect(one.find(a => a.title === 'Most wins')!.names).toHaveLength(5);
+    expect(one.find(a => a.title === 'Iron man')).toBeUndefined(); // all 10 played 1 game
   });
 
   test('a player\'s own games', () => {

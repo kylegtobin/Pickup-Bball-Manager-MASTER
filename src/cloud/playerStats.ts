@@ -107,8 +107,8 @@ export const playerLines = (games: ViewGame[]): PlayerLine[] => {
 
 export interface Award { title: string; names: string[]; value: string }
 
-// Tonight's shout-outs. Positive only, and ties are shared by up to 3 people
-// (when half the gym is tied it isn't much of an award).
+// Tonight's shout-outs. Positive only, and ties are shared by up to 5 people (a team);
+// when more than a team is tied it isn't much of an award.
 export const nightAwards = (games: ViewGame[]): Award[] => {
   const lines = playerLines(games);
   if (!lines.length) return [];
@@ -116,7 +116,7 @@ export const nightAwards = (games: ViewGame[]): Award[] => {
     const best = Math.max(...lines.map(pick));
     if (best <= 0) return null;
     const names = lines.filter(l => pick(l) === best).map(l => l.name);
-    if (names.length > 3) return null;
+    if (names.length > 5) return null;
     return { title, names, value: unit(best) };
   };
   return [
