@@ -107,7 +107,7 @@ function MainApp() {
 
 function SampleBanner({ onReset, onExit }: { onReset: () => void; onExit: () => void }) {
   return (
-    <div className="sticky top-0 z-[60] bg-amber-300 border-b-4 border-amber-500 shadow">
+    <div className="sticky top-0 z-[45] bg-amber-300 border-b-4 border-amber-500 shadow">
       <div className="max-w-6xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
         <p className="text-gray-900 text-base sm:text-lg">
           <strong>This is a sample.</strong> Made-up players. Nothing here touches a real game.
@@ -325,7 +325,7 @@ function PickupBasketballApp({ sample, onTrySample, active }: PickupBasketballAp
       <div className="px-6 py-4">
       <div className="container mx-auto px-4 py-2 max-w-6xl">
         {/* Header: logo left, menu right, one row */}
-        <div className="flex items-center justify-between gap-4 mb-4">
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mb-4">
           <img
             src={PBM1Logo}
             alt="Pickup Basketball Manager"
@@ -333,7 +333,7 @@ function PickupBasketballApp({ sample, onTrySample, active }: PickupBasketballAp
             style={{ mixBlendMode: 'multiply' }}
           />
           <nav>
-            <ul className="flex items-center">
+            <ul className="flex flex-wrap items-center gap-y-1">
               <li>
                 <button
                   type="button"
