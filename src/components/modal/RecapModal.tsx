@@ -1,7 +1,7 @@
 import React from 'react';
 import { useGame, pausedSnapshot } from '../../context/GameContext';
 import { NightSummary } from '../../types';
-import { nightLeaders, joinNames } from '../../utils/nightStats';
+import { nightLeaders, awardNames } from '../../utils/nightStats';
 import { drawRecapCard, downloadBlob, downloadBackup, recapFilename } from '../../utils/recapImage';
 import { useDialogFocus } from '../../utils/useDialogFocus';
 import { parseBackup, ParsedBackup } from '../../utils/backup';
@@ -148,19 +148,19 @@ const RecapModal: React.FC<{ onClose: () => void; isSample?: boolean }> = ({ onC
                 {bestStreak && bestStreak.count >= 2 && (
                   <div>
                     <dt className="font-bold text-[#1B2430]">Longest streak: {bestStreak.count} straight {bestStreak.count === 1 ? 'win' : 'wins'}</dt>
-                    <dd className="text-gray-700">{bestStreak.names.join(', ')}</dd>
+                    <dd className="text-gray-700">{awardNames(bestStreak.names)}</dd>
                   </div>
                 )}
                 {mostWins && (
                   <div>
                     <dt className="font-bold text-[#1B2430]">Most wins: {mostWins.count}</dt>
-                    <dd className="text-gray-700">{joinNames(mostWins.names, 6)}</dd>
+                    <dd className="text-gray-700">{awardNames(mostWins.names)}</dd>
                   </div>
                 )}
                 {mostGames && (
                   <div>
                     <dt className="font-bold text-[#1B2430]">Most games: {mostGames.count}</dt>
-                    <dd className="text-gray-700">{joinNames(mostGames.names, 6)}</dd>
+                    <dd className="text-gray-700">{awardNames(mostGames.names)}</dd>
                   </div>
                 )}
                 {championStreak >= 2 && champions.length > 0 && (
