@@ -11,6 +11,7 @@ interface PlayerSlotProps {
   selected?: boolean; // this player is picked up in manual mode
   armed?: boolean; // someone is picked up and this open spot can take them
   swapTarget?: boolean; // someone is picked up and tapping this player swaps them
+  sub?: boolean; // joined mid-game; goes to the front of the line if this team loses
   onClick?: () => void;
   onDragStart?: (e: React.DragEvent, player: Player) => void;
   onDragOver?: (e: React.DragEvent) => void;
@@ -27,6 +28,7 @@ const PlayerSlot: React.FC<PlayerSlotProps> = ({
   selected = false,
   armed = false,
   swapTarget = false,
+  sub = false,
   onClick,
   onDragStart,
   onDragOver,
@@ -74,6 +76,9 @@ const PlayerSlot: React.FC<PlayerSlotProps> = ({
       onContextMenu={player && onContextMenu ? (e) => onContextMenu(e, player.id) : undefined}
     >
       {player ? player.name : (manualMode ? 'Open spot' : ' ')}
+      {player && sub && (
+        <span aria-hidden="true" title="Subbed in mid-game. If this team loses, they go to the front of the line." className="ml-2 rounded-full bg-[#E8EEF9] px-2 py-0.5 text-xs font-bold text-[#1E3A8A] align-middle">Sub</span>
+      )}
     </div>
   );
 };

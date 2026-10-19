@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useGame } from '../../context/GameContext';
+import { useGame, isSub } from '../../context/GameContext';
 import { Player } from '../../types';
 import PlayerSlot from './PlayerSlot';
 import Champions3Logo from '../../assets/images/Champions3.jpg';
@@ -157,6 +157,7 @@ const TeamBox: React.FC<TeamBoxProps> = ({ title, team, type }) => {
             manualMode={manualMode}
             selected={selectedPlayerId === player.id}
             swapTarget={canSwapHere}
+            sub={isSub(gameState, player.id)}
             onClick={() => handlePlayerTap(player)}
             onDragStart={handlePlayerDragStart}
             onContextMenu={handleContextMenu}
