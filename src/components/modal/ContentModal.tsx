@@ -100,7 +100,8 @@ const ContentModal: React.FC<ContentModalProps> = ({ isOpen, title, content, onC
         </div>
         
         {/* Content area with scrolling */}
-        <div className="p-8 overflow-y-auto">
+        {/* Focus starts here so Page Down, End and the arrow keys scroll the guide; Tab still reaches Close and any links or video */}
+        <div className="p-8 overflow-y-auto outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1E3A8A]" tabIndex={0} data-autofocus role="region" aria-label={`${title} content`}>
           {content}
         </div>
       </div>
