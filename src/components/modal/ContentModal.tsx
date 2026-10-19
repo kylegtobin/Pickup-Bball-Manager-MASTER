@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { useDialogFocus } from '../../utils/useDialogFocus';
 
 interface ContentModalProps {
   isOpen: boolean;
@@ -9,6 +10,8 @@ interface ContentModalProps {
 
 const ContentModal: React.FC<ContentModalProps> = ({ isOpen, title, content, onClose }) => {
   const modalRef = useRef<HTMLDivElement>(null);
+  // Marked as a dialog so the scoreboard keys (Q/W/O/P, Space) stay quiet while it's open, and Tab stays inside
+  useDialogFocus(modalRef, isOpen);
   
   // Handle escape key press to close modal
   useEffect(() => {
@@ -61,7 +64,11 @@ const ContentModal: React.FC<ContentModalProps> = ({ isOpen, title, content, onC
       <div className="absolute inset-0 bg-black bg-opacity-50"></div>
       <div 
         ref={modalRef}
-        className="bg-white rounded-lg shadow-xl w-full max-w-5xl mx-4 relative border-2 border-gray-300 max-h-[90vh] flex flex-col"
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        tabIndex={-1}
+        className="outline-none bg-white rounded-lg shadow-xl w-full max-w-5xl mx-4 relative border-2 border-gray-300 max-h-[90vh] flex flex-col"
       >
         {/* Header with title and close button */}
         <div className="flex justify-between items-center border-b-2 border-gray-300 p-6 bg-gray-50">
@@ -80,7 +87,10 @@ const ContentModal: React.FC<ContentModalProps> = ({ isOpen, title, content, onC
             <h2 className="text-3xl font-bold text-gray-800 text-center">{title}</h2>
           )}
           <button 
+            type="button"
             onClick={onClose}
+            aria-label="Close"
+            title="Close"
             className="text-gray-500 hover:text-gray-700 focus:outline-none transition-colors duration-200"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
