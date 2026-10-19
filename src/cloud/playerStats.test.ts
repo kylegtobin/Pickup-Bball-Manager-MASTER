@@ -81,6 +81,11 @@ describe('player stats', () => {
     expect(nightAwards([])).toEqual([]);
   });
 
+  test('no award when more than 3 people share it', () => {
+    const awards = nightAwards([g('n1', 'champions', ['A', 'B', 'C', 'D', 'E'], ['F', 'G', 'H', 'I', 'J'])]);
+    expect(awards).toEqual([]);
+  });
+
   test('a player\'s own games', () => {
     const games = [g('n1', 'champions', ['Ben A.'], ['X']), g('n1', 'champions', ['Y'], ['Z'])];
     expect(gamesFor(games, 'ben a.')).toHaveLength(1);
