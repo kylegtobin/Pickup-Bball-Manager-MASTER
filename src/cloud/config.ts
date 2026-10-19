@@ -16,16 +16,17 @@ const set = (k: string, v: string | null) => {
   try { if (v === null) window.localStorage.removeItem(k); else window.localStorage.setItem(k, v); } catch { /* blocked */ }
 };
 
-// Phone view for everyone: the runner's Phone view button and the phone landing page. Off until the
-// runner's email sign-in has been tested on the live site; until then ?cloud=1 turns it on per browser.
-export const PHONE_VIEW_FOR_EVERYONE = false;
+// Phone view for everyone: the runner's Phone view button and the phone landing page.
+// On since Oct 18, after the runner's email sign-in worked on the live site.
+export const PHONE_VIEW_FOR_EVERYONE = true;
 
-// ?cloud=1 turns it on for this browser, ?cloud=0 turns it off. The setting sticks.
+// ?cloud=1 turns it on for this browser, ?cloud=0 turns it off. The setting sticks, and a browser
+// that turned it off stays off even though it's on for everyone.
 export const readCloudSwitch = (): boolean => {
   try {
     const q = new URLSearchParams(window.location.search).get('cloud');
     if (q === '1') set(SWITCH_KEY, '1');
-    if (q === '0') set(SWITCH_KEY, null);
+    if (q === '0') set(SWITCH_KEY, '0');
     if (q !== null) {
       // Tidy the address bar (anything else in it, like a sign-in code, stays)
       const u = new URL(window.location.href);
@@ -33,10 +34,12 @@ export const readCloudSwitch = (): boolean => {
       window.history.replaceState(window.history.state, '', u.pathname + u.search + u.hash);
     }
   } catch { /* fine */ }
-  return PHONE_VIEW_FOR_EVERYONE || get(SWITCH_KEY) === '1';
+  const saved = get(SWITCH_KEY);
+  if (saved === '0') return false;
+  return PHONE_VIEW_FOR_EVERYONE || saved === '1';
 };
 
-export const setCloudSwitch = (on: boolean) => set(SWITCH_KEY, on ? '1' : null);
+export const setCloudSwitch = (on: boolean) => set(SWITCH_KEY, on ? '1' : '0');
 
 // The phone page: ?run=<the run's link code>
 export const runViewToken = (): string | null => {

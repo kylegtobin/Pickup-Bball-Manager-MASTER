@@ -1,4 +1,4 @@
-import { screenId, resetScreenIdForTests, deviceId } from './config';
+import { screenId, resetScreenIdForTests, deviceId, readCloudSwitch, setCloudSwitch, PHONE_VIEW_FOR_EVERYONE } from './config';
 
 // A pretend BroadcastChannel shared by every "tab" in this test
 class FakeChannel {
@@ -49,4 +49,20 @@ test('a new tab with nothing copied gets a new id', async () => {
 
 test('ids fit the database (64 characters at most)', async () => {
   expect((await screenId(10)).length).toBeLessThanOrEqual(64);
+});
+
+describe('phone view switch', () => {
+  beforeEach(() => window.localStorage.clear());
+
+  test('on for everyone by default', () => {
+    expect(PHONE_VIEW_FOR_EVERYONE).toBe(true);
+    expect(readCloudSwitch()).toBe(true);
+  });
+
+  test('turning it off on one computer sticks, and it can come back on', () => {
+    setCloudSwitch(false);
+    expect(readCloudSwitch()).toBe(false);
+    setCloudSwitch(true);
+    expect(readCloudSwitch()).toBe(true);
+  });
 });
