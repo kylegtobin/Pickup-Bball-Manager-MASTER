@@ -2,7 +2,7 @@
 // GameContext uses these; keeping them here makes them easy to test and, later, to share with the server.
 import { v4 as uuidv4 } from 'uuid';
 import { Player, PreviousTeam, WaitingQueueItem, GameState, Regular, PlayerRef, NightSummary } from '../types';
-import { newScore, newClock, timeLeft } from '../utils/score';
+import { newScore, newClock, timeLeft, clockState } from '../utils/score';
 
 // Helper function to check if an item is a PreviousTeam
 export const isPreviousTeam = (item: WaitingQueueItem): item is PreviousTeam => {
@@ -175,6 +175,24 @@ export const clearSitOut = (s: GameState): GameState => {
   (s.sittingOut ?? []).forEach(e => returning.push(strip(e.player)));
   if (returning.length === 0 && (s.sittingOut ?? []).length === 0) return s;
   return { ...s, sittingOut: [], waitingQueue: [...queue, ...returning] };
+};
+
+// Subs: someone who joins a team from the line (or a new sign-in) after the game got going.
+// If their team loses they go to the front of the line instead of the back with the losing group,
+// since they barely played. The game counts as going once the scoreboard is in use, or two minutes
+// after the teams were set (so a quick lineup fix right after a result isn't a sub).
+export const SUB_GRACE_MS = 2 * 60 * 1000;
+export const gameUnderway = (s: GameState, now = Date.now()) =>
+  s.score.champions + s.score.challengers > 0 ||
+  clockState(s.clock, now) !== 'not-started' ||
+  (s.gameStartTime !== null && now - s.gameStartTime >= SUB_GRACE_MS);
+export const isSub = (s: GameState, playerId: string) =>
+  (s.replacementTracking?.replacements ?? []).some(r => r.playerId === playerId);
+export const markSubs = (s: GameState, ids: string[], now = Date.now()): GameState => {
+  if (!ids.length || !gameUnderway(s, now)) return s;
+  const have = s.replacementTracking?.replacements ?? [];
+  const add = ids.filter(id => !have.some(r => r.playerId === id)).map(id => ({ playerId: id, originalPosition: 0 }));
+  return add.length ? { ...s, replacementTracking: { replacements: [...have, ...add] } } : s;
 };
 
 export const ref = (p: Player): PlayerRef => ({ id: p.rid ?? p.id, name: p.name });
