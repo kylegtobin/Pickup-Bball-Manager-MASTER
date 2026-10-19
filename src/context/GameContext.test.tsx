@@ -841,3 +841,62 @@ describe('open spots follow the lineup, not an old status (Astra 4th)', () => {
     unmount();
   });
 });
+
+describe('subs who lose go to the front of the line', () => {
+  const all = (s: GameState) => [...s.champions, ...s.challengers, ...s.waitingQueue.flatMap(i => (isPreviousTeam(i) ? i.players : [i]))];
+  const idOf = (s: GameState, name: string) => all(s).find(p => p.name === name)!.id;
+
+  test('someone hurt mid-game: the next player in subs in, and if that team loses the sub plays the next game', () => {
+    const { result, unmount } = setup();
+    signIn(result, NAMES.slice(0, 16)); // Kai, Leo, Max, Nico, Owen, Pat waiting
+    act(() => { result.current.startClock(); }); // the game is on
+    act(() => { result.current.removePlayer('Cody'); }); // hurt
+    act(() => { result.current.addPlayerToTeam(idOf(result.current.gameState, 'Kai'), 'champions'); });
+    expect(result.current.gameState.replacementTracking.replacements.map(r => r.playerId)).toEqual([idOf(result.current.gameState, 'Kai')]);
+    if (result.current.gameState.manualMode) act(() => { result.current.toggleManualMode(); });
+    win(result, 'challengers'); // Kai's team loses
+    const s = result.current.gameState;
+    expect(names(s.challengers)).toEqual(['Kai', 'Leo', 'Max', 'Nico', 'Owen']); // Kai first in line, so he plays
+    expect(lineNames(s)).toEqual(['Pat', '[Avery,Blake,Drew,Ezra]']);
+    expect(s.replacementTracking.replacements).toEqual([]);
+    unmount();
+  });
+
+  test('a lineup fix right after the teams are set is not a sub', () => {
+    const { result, unmount } = setup();
+    signIn(result, NAMES.slice(0, 16));
+    act(() => { result.current.removePlayer('Cody'); });
+    act(() => { result.current.addPlayerToTeam(idOf(result.current.gameState, 'Kai'), 'champions'); });
+    expect(result.current.gameState.replacementTracking.replacements).toEqual([]);
+    if (result.current.gameState.manualMode) act(() => { result.current.toggleManualMode(); });
+    win(result, 'challengers');
+    expect(lineNames(result.current.gameState)).toContain('[Avery,Blake,Drew,Ezra,Kai]');
+    unmount();
+  });
+
+  test('swapping someone in from the line mid-game makes them a sub; a sub who wins just stays on', () => {
+    const { result, unmount } = setup();
+    signIn(result, NAMES.slice(0, 16));
+    act(() => { result.current.startClock(); });
+    act(() => { result.current.swapPlayers(idOf(result.current.gameState, 'Kai'), idOf(result.current.gameState, 'Blake')); });
+    const kai = idOf(result.current.gameState, 'Kai');
+    expect(result.current.gameState.replacementTracking.replacements.map(r => r.playerId)).toEqual([kai]);
+    win(result, 'champions'); // Kai's team wins
+    const s = result.current.gameState;
+    expect(names(s.champions)).toContain('Kai');
+    expect(s.replacementTracking.replacements).toEqual([]);
+    unmount();
+  });
+
+  test('a new sign-in filling an open spot mid-game is a sub too', () => {
+    const { result, unmount } = setup();
+    signIn(result, NAMES.slice(0, 10)); // nobody waiting
+    act(() => { result.current.startClock(); });
+    act(() => { result.current.removePlayer('Gabe'); });
+    act(() => { result.current.addPlayer('Zed'); });
+    const s = result.current.gameState;
+    expect(names(s.challengers)).toContain('Zed');
+    expect(s.replacementTracking.replacements.map(r => r.playerId)).toEqual([idOf(s, 'Zed')]);
+    unmount();
+  });
+});

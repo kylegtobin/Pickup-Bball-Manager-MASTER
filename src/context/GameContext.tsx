@@ -18,6 +18,7 @@ import {
   reconcileVacancy,
   canFillDirectly,
   clearSitOut,
+  markSubs,
   ref,
   summarize,
   withBuzzer,
@@ -41,6 +42,7 @@ import {
 
 // Re-exported so existing imports keep working
 export { isPreviousTeam, pausedSnapshot, reconcileRegulars, remapNight };
+export { isSub } from "../rules/lineup";
 
 // Define the shape of the context value
 export interface GameContextProps {
@@ -295,12 +297,15 @@ export function GameProvider({ children, initialState, persistKey, initialRegula
     pendingLabelRef.current = `Swapped ${a.name} and ${b.name}`;
     setGameState(prev => {
       const swap = (p: Player) => (p.id === aId ? b : p.id === bId ? a : p);
-      return {
+      const onCourt = (id: string) => prev.champions.some(p => p.id === id) || prev.challengers.some(p => p.id === id);
+      // Someone from the line swapped onto the court mid-game is a sub
+      const comingOn = [aId, bId].filter(id => !onCourt(id) && [aId, bId].some(o => o !== id && onCourt(o)));
+      return markSubs({
         ...prev,
         champions: prev.champions.map(swap),
         challengers: prev.challengers.map(swap),
         waitingQueue: prev.waitingQueue.map(item => (isPreviousTeam(item) ? { ...item, players: item.players.map(swap) } : swap(item))),
-      };
+      }, comingOn);
     });
   }, []);
 
@@ -354,8 +359,10 @@ export function GameProvider({ children, initialState, persistKey, initialRegula
       if (canFillDirectly(prev)) {
         if (prev.champions.length < 5) {
           updatedState.champions = [...prev.champions, newPlayer];
+          Object.assign(updatedState, markSubs(updatedState, [newPlayer.id]));
         } else if (prev.challengers.length < 5) {
           updatedState.challengers = [...prev.challengers, newPlayer];
+          Object.assign(updatedState, markSubs(updatedState, [newPlayer.id]));
         } else {
           updatedState.waitingQueue = [...prev.waitingQueue, newPlayer];
         }
@@ -789,7 +796,8 @@ export function GameProvider({ children, initialState, persistKey, initialRegula
         }
       }
 
-      return newState;
+      // Off the line and onto a team mid-game: a sub
+      return sourceIndex !== null ? markSubs(newState, [playerToMove.id]) : newState;
     });
   }, []);
 
@@ -800,20 +808,11 @@ export function GameProvider({ children, initialState, persistKey, initialRegula
     console.log("[processGameEnd - Step 1] Losers:", losingTeam);
 
     setGameState(prev => {
-      // Handle winners - remove their replacement tracking if they were replacements
-      const winningIds = new Set(winningTeam.map(p => p.id));
-      const updatedReplacements = prev.replacementTracking.replacements.filter(
-        r => !winningIds.has(r.playerId)
-      );
-
-      // Handle losers - separate into regular and replacement players
-      const loserReplacements = prev.replacementTracking.replacements.filter(
-        r => losingTeam.some(p => p.id === r.playerId)
-      );
-      
-      const regularLosers = losingTeam.filter(
-        p => !loserReplacements.some(r => r.playerId === p.id)
-      );
+      // Subs on the losing team (joined mid-game) go to the front of the line; the rest go to the
+      // back together as a group
+      const subIds = new Set((prev.replacementTracking?.replacements ?? []).map(r => r.playerId));
+      const loserSubs = losingTeam.filter(p => subIds.has(p.id));
+      const regularLosers = losingTeam.filter(p => !subIds.has(p.id));
 
       // Create Previous Team only from regular losers
       const losersToAdd: PreviousTeam | null = regularLosers.length > 0
@@ -833,10 +832,8 @@ export function GameProvider({ children, initialState, persistKey, initialRegula
         ...prev,
         tempChampions: winningTeam,
         tempLosersToAdd: losersToAdd,
-        tempQueueBeforeLosers: prev.waitingQueue, // Store current queue before adding losers
-        replacementTracking: {
-          replacements: updatedReplacements // Keep only non-winner replacements
-        },
+        tempQueueBeforeLosers: [...loserSubs, ...prev.waitingQueue], // Losing subs first, then the line as it was
+        replacementTracking: { replacements: [] }, // A new game: nobody is a sub yet
         status: 'PENDING_QUEUE_UPDATE',
         championStreak: streak,
         gamesPlayed: prev.gamesPlayed + 1,
